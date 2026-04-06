@@ -1,0 +1,10 @@
+.git
+.github
+.next
+node_modules
+test-results
+playwright-report
+coverage
+.env.local
+.env.*.local
+source-code.tar.gz

@@ -1,0 +1,8 @@
+﻿[dotenv@17.2.3] injecting env (5) from .env.local -- tip: 馃摗 add observability to secrets: https://dotenvx.com/ops
+
+Running 1 test using 1 worker
+
+[dotenv@17.2.3] injecting env (0) from .env.local -- tip: 馃攼 prevent committing .env to code: https://dotenvx.com/precommit
+  鉁? 1 tests\e2e\playwright\data-screen-formal.spec.ts:11:7 鈥?data-screen formal validation 鈥?shows staged cockpit modules with API-aligned stats and canonical drill-through (2.3s)
+
+  1 passed (3.6s)

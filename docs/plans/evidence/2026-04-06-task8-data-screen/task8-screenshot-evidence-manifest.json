@@ -1,0 +1,75 @@
+{
+  "generatedAt": "2026-04-06 17:29:28",
+  "baseUrl": "http://localhost:5004",
+  "buildId": "QtQJ7V2Xl8fJVkIswY6tx",
+  "overview": {
+    "totalOpenCount": 358,
+    "totalOpenAmount": 356766580,
+    "avgWinProbability": 68,
+    "weightedPipeline": 213313406,
+    "missingWinProbabilityCount": 336
+  },
+  "presales": {
+    "totalSupportHours": 18,
+    "activeSupportProjects": 1,
+    "missingWorklogRecordCount": 0
+  },
+  "screenshots": [
+    {
+      "id": "SS-01",
+      "title": "管理层默认首屏总览",
+      "path": "docs/plans/evidence/2026-04-06-task8-data-screen/ss-01-management-overview.png",
+      "url": "/data-screen",
+      "focus": "经营总览、目标与预测、风险摘要"
+    },
+    {
+      "id": "SS-02",
+      "title": "管理层区域金额贡献 TOP3",
+      "path": "docs/plans/evidence/2026-04-06-task8-data-screen/ss-02-management-top3.png",
+      "url": "/data-screen",
+      "focus": "证明当前展示为金额榜而非热点榜"
+    },
+    {
+      "id": "SS-03",
+      "title": "经营负责人首屏整卡",
+      "path": "docs/plans/evidence/2026-04-06-task8-data-screen/ss-03-business-overview.png",
+      "url": "/data-screen",
+      "focus": "在手机会、敞口金额、平均赢率、本周到期"
+    },
+    {
+      "id": "SS-04",
+      "title": "经营负责人漏斗与风险区域",
+      "path": "docs/plans/evidence/2026-04-06-task8-data-screen/ss-04-business-funnel-risk.png",
+      "url": "/data-screen",
+      "focus": "missingWinProbabilityCount=336 与 weightedPipeline=213313406"
+    },
+    {
+      "id": "SS-05",
+      "title": "经营负责人钻取项目页",
+      "path": "docs/plans/evidence/2026-04-06-task8-data-screen/ss-05-projects-drillthrough.png",
+      "url": "/projects?stage=opportunity",
+      "focus": "证明 drill-through 进入 canonical 项目页"
+    },
+    {
+      "id": "SS-06",
+      "title": "售前负责人首屏整卡",
+      "path": "docs/plans/evidence/2026-04-06-task8-data-screen/ss-06-presales-overview.png",
+      "url": "/data-screen",
+      "focus": "总支撑工时=18，活跃支撑项目=1"
+    },
+    {
+      "id": "SS-07",
+      "title": "售前负责人工时提示区域",
+      "path": "docs/plans/evidence/2026-04-06-task8-data-screen/ss-07-presales-worklog-hint.png",
+      "url": "/data-screen",
+      "focus": "missingWorklogRecordCount=0"
+    },
+    {
+      "id": "SS-08",
+      "title": "售前负责人钻取人员页",
+      "path": "docs/plans/evidence/2026-04-06-task8-data-screen/ss-08-staff-drillthrough.png",
+      "url": "/staff",
+      "focus": "证明人员管理入口进入 canonical /staff"
+    }
+  ]
+}

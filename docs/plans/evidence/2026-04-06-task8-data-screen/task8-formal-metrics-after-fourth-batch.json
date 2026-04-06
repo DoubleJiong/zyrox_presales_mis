@@ -1,0 +1,58 @@
+{
+  "generatedAt": "2026-04-06T09:25:26.624Z",
+  "overviewStatus": 200,
+  "presalesStatus": 200,
+  "funnel": {
+    "totalOpenCount": 358,
+    "totalOpenAmount": 356766580,
+    "weightedPipeline": 213313406,
+    "avgWinProbability": 68,
+    "missingWinProbabilityCount": 336,
+    "stages": [
+      {
+        "key": "lead",
+        "label": "线索储备",
+        "count": 0,
+        "amount": 0,
+        "weightedAmount": 0
+      },
+      {
+        "key": "qualified",
+        "label": "需求确认",
+        "count": 356,
+        "amount": 356566580,
+        "weightedAmount": 213213406
+      },
+      {
+        "key": "proposal",
+        "label": "方案报价",
+        "count": 0,
+        "amount": 0,
+        "weightedAmount": 0
+      },
+      {
+        "key": "negotiation",
+        "label": "招投标推进",
+        "count": 2,
+        "amount": 200000,
+        "weightedAmount": 100000
+      },
+      {
+        "key": "won",
+        "label": "已转合同",
+        "count": 69,
+        "amount": 181901928.48,
+        "weightedAmount": 181901928.48
+      }
+    ]
+  },
+  "presalesSummary": {
+    "totalSupportHours": 18,
+    "activeSupportProjects": 1,
+    "overloadedStaffCount": 0,
+    "activeServiceTypes": 2,
+    "solutionReuseCoverageRate": 0,
+    "solutionUsageProjects": 0,
+    "missingWorklogRecordCount": 0
+  }
+}

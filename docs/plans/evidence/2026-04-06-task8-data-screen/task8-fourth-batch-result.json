@@ -1,0 +1,29 @@
+{
+  "generatedAt": "2026-04-06T09:23:16.784Z",
+  "batch": "task8-fourth-batch",
+  "beforeMissingCount": 341,
+  "insertedCount": 5,
+  "afterMissingCount": 336,
+  "insertedRows": [
+    {
+      "projectId": 133,
+      "projectName": "中国石油大学(北京)智慧校园(三期)"
+    },
+    {
+      "projectId": 266,
+      "projectName": "哈尔滨体育学院智慧校园二期策划"
+    },
+    {
+      "projectId": 330,
+      "projectName": "衢州教育局银校合作"
+    },
+    {
+      "projectId": 159,
+      "projectName": "大同大学物联校园项目"
+    },
+    {
+      "projectId": 397,
+      "projectName": "哈尔滨商业大学智慧校园"
+    }
+  ]
+}

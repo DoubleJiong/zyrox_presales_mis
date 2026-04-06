@@ -1,0 +1,659 @@
+/* =====================================================
+   科幻控制台视觉风格 - Sci-Fi Console Theme
+   ===================================================== */
+
+/* 科幻控制台专用颜色变量 */
+:root {
+  /* 核心色彩体系 */
+  --sci-bg-deep: #0a0e1a;           /* 深蓝黑背景 */
+  --sci-bg-panel: #0d1526;          /* 面板背景 */
+  --sci-bg-card: #111d33;           /* 卡片背景 */
+  --sci-bg-hover: #162240;          /* 悬停背景 */
+  
+  /* 主色调 - 科技青蓝 */
+  --sci-primary: #00d4ff;           /* 主色-青色 */
+  --sci-primary-dim: #0099cc;       /* 主色-暗淡 */
+  --sci-primary-glow: rgba(0, 212, 255, 0.5);
+  
+  /* 辅助色 */
+  --sci-secondary: #00ff88;         /* 辅助色-科技绿 */
+  --sci-secondary-dim: #00cc6a;
+  --sci-secondary-glow: rgba(0, 255, 136, 0.5);
+  
+  /* 警示色 */
+  --sci-warning: #ffaa00;           /* 警告-橙黄 */
+  --sci-warning-glow: rgba(255, 170, 0, 0.5);
+  --sci-danger: #ff3366;            /* 危险-红 */
+  --sci-danger-glow: rgba(255, 51, 102, 0.5);
+  --sci-success: #00ff88;           /* 成功-绿 */
+  
+  /* 边框与线条 */
+  --sci-border: rgba(0, 212, 255, 0.3);
+  --sci-border-bright: rgba(0, 212, 255, 0.6);
+  --sci-border-dim: rgba(0, 212, 255, 0.15);
+  
+  /* 文字颜色 */
+  --sci-text-primary: #e8f4ff;      /* 主要文字 */
+  --sci-text-secondary: #8ba4c7;    /* 次要文字 */
+  --sci-text-dim: #4a6a94;          /* 暗淡文字 */
+  --sci-text-glow: rgba(232, 244, 255, 0.8);
+  
+  /* 特效颜色 */
+  --sci-grid: rgba(0, 212, 255, 0.05);
+  --sci-scanline: rgba(0, 212, 255, 0.03);
+  --sci-gradient-start: #0a0e1a;
+  --sci-gradient-end: #0d1a2d;
+}
+
+/* =====================================================
+   科幻背景效果
+   ===================================================== */
+
+/* 深空背景 */
+.sci-bg-space {
+  background: 
+    radial-gradient(ellipse at 20% 20%, rgba(0, 100, 150, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(0, 50, 100, 0.1) 0%, transparent 50%),
+    linear-gradient(180deg, var(--sci-bg-deep) 0%, var(--sci-gradient-end) 100%);
+}
+
+/* 网格背景 */
+.sci-bg-grid {
+  background-image: 
+    linear-gradient(var(--sci-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sci-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* 组合背景 */
+.sci-bg-console {
+  background: 
+    linear-gradient(180deg, var(--sci-bg-deep) 0%, var(--sci-gradient-end) 100%);
+  position: relative;
+}
+
+.sci-bg-console::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(var(--sci-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sci-grid) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+}
+
+/* 扫描线效果 */
+.sci-scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    var(--sci-scanline) 2px,
+    var(--sci-scanline) 4px
+  );
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* 动态扫描线 */
+@keyframes sciScan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.sci-scanner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--sci-primary-glow),
+    var(--sci-primary),
+    var(--sci-primary-glow),
+    transparent
+  );
+  animation: sciScan 8s linear infinite;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* =====================================================
+   发光边框效果
+   ===================================================== */
+
+/* 基础发光边框 */
+.sci-border-glow {
+  border: 1px solid var(--sci-border);
+  box-shadow: 
+    0 0 10px var(--sci-border-dim),
+    inset 0 0 10px var(--sci-border-dim);
+}
+
+/* 强发光边框 */
+.sci-border-glow-bright {
+  border: 1px solid var(--sci-border-bright);
+  box-shadow: 
+    0 0 15px var(--sci-primary-glow),
+    0 0 30px rgba(0, 212, 255, 0.1),
+    inset 0 0 15px rgba(0, 212, 255, 0.05);
+}
+
+/* 角落装饰边框 */
+.sci-border-corners {
+  position: relative;
+  border: 1px solid var(--sci-border-dim);
+}
+
+.sci-border-corners::before,
+.sci-border-corners::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: var(--sci-primary);
+  border-style: solid;
+}
+
+.sci-border-corners::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+}
+
+.sci-border-corners::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+}
+
+/* 四角装饰 */
+.sci-border-corners-all {
+  position: relative;
+  border: 1px solid var(--sci-border-dim);
+}
+
+.sci-border-corners-all::before,
+.sci-border-corners-all::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: var(--sci-primary);
+  border-style: solid;
+}
+
+.sci-border-corners-all::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+}
+
+.sci-border-corners-all::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+}
+
+/* 悬停发光效果 */
+.sci-hover-glow {
+  transition: all 0.3s ease;
+}
+
+.sci-hover-glow:hover {
+  border-color: var(--sci-border-bright);
+  box-shadow: 
+    0 0 20px var(--sci-primary-glow),
+    0 0 40px rgba(0, 212, 255, 0.15);
+}
+
+/* =====================================================
+   文字效果
+   ===================================================== */
+
+/* 发光文字 */
+.sci-text-glow {
+  color: var(--sci-text-primary);
+  text-shadow: 
+    0 0 10px var(--sci-primary-glow),
+    0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+/* 霓虹文字 */
+.sci-text-neon {
+  color: var(--sci-primary);
+  text-shadow: 
+    0 0 5px var(--sci-primary),
+    0 0 10px var(--sci-primary),
+    0 0 20px var(--sci-primary-glow),
+    0 0 40px var(--sci-primary-glow);
+}
+
+/* 数据文字 */
+.sci-text-data {
+  font-family: var(--font-mono);
+  color: var(--sci-primary);
+  letter-spacing: 0.05em;
+}
+
+/* =====================================================
+   动画效果
+   ===================================================== */
+
+/* 脉冲发光 */
+@keyframes sciPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.sci-pulse {
+  animation: sciPulse 2s ease-in-out infinite;
+}
+
+/* 呼吸发光 */
+@keyframes sciBreathe {
+  0%, 100% { 
+    box-shadow: 0 0 5px var(--sci-border-dim);
+  }
+  50% { 
+    box-shadow: 0 0 20px var(--sci-primary-glow), 0 0 40px rgba(0, 212, 255, 0.1);
+  }
+}
+
+.sci-breathe {
+  animation: sciBreathe 3s ease-in-out infinite;
+}
+
+/* 闪烁效果 */
+@keyframes sciBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.sci-blink {
+  animation: sciBlink 1s step-end infinite;
+}
+
+/* 数据流动画 */
+@keyframes sciDataFlow {
+  0% { 
+    background-position: 0% 50%;
+  }
+  100% { 
+    background-position: 200% 50%;
+  }
+}
+
+.sci-data-flow {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--sci-primary-dim),
+    var(--sci-primary),
+    var(--sci-primary-dim),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: sciDataFlow 3s linear infinite;
+}
+
+/* 加载旋转 */
+@keyframes sciSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sci-spin {
+  animation: sciSpin 2s linear infinite;
+}
+
+/* 淡入效果 */
+@keyframes sciFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sci-fade-in {
+  animation: sciFadeIn 0.5s ease-out forwards;
+}
+
+/* =====================================================
+   面板与卡片样式
+   ===================================================== */
+
+/* 控制台面板 */
+.sci-panel {
+  background: var(--sci-bg-panel);
+  border: 1px solid var(--sci-border);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.sci-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--sci-primary),
+    transparent
+  );
+}
+
+/* 玻璃态面板 */
+.sci-panel-glass {
+  background: rgba(13, 21, 38, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--sci-border);
+  border-radius: 8px;
+}
+
+/* 数据卡片 */
+.sci-card {
+  background: var(--sci-bg-card);
+  border: 1px solid var(--sci-border-dim);
+  border-radius: 4px;
+  padding: 16px;
+  transition: all 0.3s ease;
+}
+
+.sci-card:hover {
+  border-color: var(--sci-border);
+  background: var(--sci-bg-hover);
+}
+
+/* 强调卡片 */
+.sci-card-accent {
+  background: linear-gradient(
+    135deg,
+    var(--sci-bg-card) 0%,
+    rgba(0, 212, 255, 0.05) 100%
+  );
+  border: 1px solid var(--sci-border);
+  border-radius: 4px;
+  padding: 16px;
+}
+
+/* =====================================================
+   标题装饰
+   ===================================================== */
+
+/* 控制台标题 */
+.sci-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(
+    90deg,
+    var(--sci-bg-panel),
+    transparent
+  );
+  border-left: 3px solid var(--sci-primary);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sci-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* 带发光的标题 */
+.sci-title-glow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 212, 255, 0.1),
+    transparent
+  );
+  border-bottom: 1px solid var(--sci-border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sci-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* 标题指示器 */
+.sci-title-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--sci-primary);
+  border-radius: 50%;
+  margin-right: 8px;
+  animation: sciPulse 2s ease-in-out infinite;
+}
+
+/* =====================================================
+   按钮样式
+   ===================================================== */
+
+/* 科幻按钮 */
+.sci-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid var(--sci-border);
+  border-radius: 4px;
+  color: var(--sci-text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.sci-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 212, 255, 0.2),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.sci-btn:hover {
+  border-color: var(--sci-primary);
+  color: var(--sci-primary);
+  box-shadow: 0 0 15px var(--sci-primary-glow);
+}
+
+.sci-btn:hover::before {
+  left: 100%;
+}
+
+/* 主要按钮 */
+.sci-btn-primary {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 212, 255, 0.2),
+    rgba(0, 212, 255, 0.1)
+  );
+  border-color: var(--sci-primary);
+  color: var(--sci-primary);
+}
+
+.sci-btn-primary:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 212, 255, 0.3),
+    rgba(0, 212, 255, 0.2)
+  );
+  box-shadow: 
+    0 0 20px var(--sci-primary-glow),
+    inset 0 0 10px rgba(0, 212, 255, 0.1);
+}
+
+/* 危险按钮 */
+.sci-btn-danger {
+  border-color: var(--sci-danger);
+  color: var(--sci-danger);
+}
+
+.sci-btn-danger:hover {
+  box-shadow: 0 0 15px var(--sci-danger-glow);
+}
+
+/* =====================================================
+   状态指示器
+   ===================================================== */
+
+/* 状态点 */
+.sci-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.sci-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: sciPulse 2s ease-in-out infinite;
+}
+
+.sci-status-dot.online {
+  background: var(--sci-success);
+  box-shadow: 0 0 10px var(--sci-secondary-glow);
+}
+
+.sci-status-dot.warning {
+  background: var(--sci-warning);
+  box-shadow: 0 0 10px var(--sci-warning-glow);
+}
+
+.sci-status-dot.offline {
+  background: var(--sci-danger);
+  box-shadow: 0 0 10px var(--sci-danger-glow);
+}
+
+.sci-status-dot.idle {
+  background: var(--sci-text-dim);
+}
+
+/* 进度条 */
+.sci-progress {
+  height: 4px;
+  background: var(--sci-bg-deep);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sci-progress-bar {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--sci-primary-dim),
+    var(--sci-primary)
+  );
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.sci-progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: sciDataFlow 2s linear infinite;
+}
+
+/* =====================================================
+   数据展示
+   ===================================================== */
+
+/* 大数字显示 */
+.sci-number {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--sci-primary);
+  text-shadow: 0 0 20px var(--sci-primary-glow);
+  line-height: 1;
+}
+
+.sci-number-sm {
+  font-size: 24px;
+}
+
+.sci-number-lg {
+  font-size: 48px;
+}
+
+/* 标签 */
+.sci-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid var(--sci-border);
+  border-radius: 2px;
+  font-size: 11px;
+  color: var(--sci-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* 分隔线 */
+.sci-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--sci-border),
+    transparent
+  );
+  margin: 16px 0;
+}
+
+/* =====================================================
+   响应式调整
+   ===================================================== */
+
+@media (max-width: 768px) {
+  .sci-number {
+    font-size: 24px;
+  }
+  
+  .sci-number-lg {
+    font-size: 32px;
+  }
+  
+  .sci-title {
+    font-size: 12px;
+    padding: 10px 12px;
+  }
+}

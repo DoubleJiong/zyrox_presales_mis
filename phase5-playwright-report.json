@@ -1,0 +1,219 @@
+﻿{
+  "config": {
+    "configFile": "C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\playwright.config.ts",
+    "rootDir": "C:/Users/doubl/Desktop/甯傚満閮?2026/閮ㄩ棬淇℃伅鍖?presales_app/workspace/app_code/tests/e2e/playwright",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "C:/Users/doubl/Desktop/甯傚満閮?2026/閮ㄩ棬淇℃伅鍖?presales_app/workspace/app_code/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "C:/Users/doubl/Desktop/甯傚満閮?2026/閮ㄩ棬淇℃伅鍖?presales_app/workspace/app_code/tests/e2e/playwright",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 16,
+    "webServer": {
+      "command": "corepack pnpm dev",
+      "url": "http://localhost:5000/login",
+      "reuseExistingServer": true,
+      "timeout": 120000
+    }
+  },
+  "suites": [
+    {
+      "title": "phase5-sample-visibility.spec.ts",
+      "file": "phase5-sample-visibility.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Phase 5 representative sample visibility",
+          "file": "phase5-sample-visibility.spec.ts",
+          "line": 45,
+          "column": 6,
+          "specs": [
+            {
+              "title": "customers page can locate all representative sample customers and survive a refresh spot-check",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 15085,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-30T03:16:44.142Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "b0783959cd908dfb4ed6-ebbded78be17eddf9c4c",
+              "file": "phase5-sample-visibility.spec.ts",
+              "line": 49,
+              "column": 7
+            },
+            {
+              "title": "projects page can locate all representative sample projects and survive a refresh spot-check",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 13394,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByText('涓浗鐭虫补澶у鍏嬫媺鐜涗緷鏍″尯鏅烘収鏍″洯').first()\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for getByText('涓浗鐭虫补澶у鍏嬫媺鐜涗緷鏍″尯鏅烘収鏍″洯').first()\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByText('涓浗鐭虫补澶у鍏嬫媺鐜涗緷鏍″尯鏅烘収鏍″洯').first()\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for getByText('涓浗鐭虫补澶у鍏嬫媺鐜涗緷鏍″尯鏅烘収鏍″洯').first()\u001b[22m\n\n    at C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\tests\\e2e\\playwright\\phase5-sample-visibility.spec.ts:79:64",
+                        "location": {
+                          "file": "C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\tests\\e2e\\playwright\\phase5-sample-visibility.spec.ts",
+                          "column": 64,
+                          "line": 79
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 77 |\u001b[39m     \u001b[36mfor\u001b[39m (\u001b[36mconst\u001b[39m sample \u001b[36mof\u001b[39m samples) {\n \u001b[90m 78 |\u001b[39m       \u001b[36mawait\u001b[39m searchInput\u001b[33m.\u001b[39mfill(sample\u001b[33m.\u001b[39mprojectName)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 79 |\u001b[39m       \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mgetByText(sample\u001b[33m.\u001b[39mprojectName)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mtoBeVisible({ timeout\u001b[33m:\u001b[39m \u001b[35m10000\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                                                                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 80 |\u001b[39m       \u001b[36mawait\u001b[39m searchInput\u001b[33m.\u001b[39mclear()\u001b[33m;\u001b[39m\n \u001b[90m 81 |\u001b[39m     }\n \u001b[90m 82 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\tests\\e2e\\playwright\\phase5-sample-visibility.spec.ts",
+                            "column": 64,
+                            "line": 79
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByText('涓浗鐭虫补澶у鍏嬫媺鐜涗緷鏍″尯鏅烘収鏍″洯').first()\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for getByText('涓浗鐭虫补澶у鍏嬫媺鐜涗緷鏍″尯鏅烘収鏍″洯').first()\u001b[22m\n\n\n  77 |     for (const sample of samples) {\n  78 |       await searchInput.fill(sample.projectName);\n> 79 |       await expect(page.getByText(sample.projectName).first()).toBeVisible({ timeout: 10000 });\n     |                                                                ^\n  80 |       await searchInput.clear();\n  81 |     }\n  82 |\n    at C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\tests\\e2e\\playwright\\phase5-sample-visibility.spec.ts:79:64"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-30T03:16:59.465Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\test-results\\phase5-sample-visibility-P-ca6c1-urvive-a-refresh-spot-check\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\tests\\e2e\\playwright\\phase5-sample-visibility.spec.ts",
+                        "column": 64,
+                        "line": 79
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "b0783959cd908dfb4ed6-36dab9e175c148fe6d9e",
+              "file": "phase5-sample-visibility.spec.ts",
+              "line": 70,
+              "column": 7
+            },
+            {
+              "title": "solutions page can locate linked project solutions and survive a refresh spot-check",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6096,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-30T03:17:13.976Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "b0783959cd908dfb4ed6-f81ab0b03f8ba028930b",
+              "file": "phase5-sample-visibility.spec.ts",
+              "line": 91,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-30T03:16:43.055Z",
+    "duration": 37435.595,
+    "expected": 2,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

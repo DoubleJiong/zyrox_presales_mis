@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: presales_system
+      POSTGRES_USER: presales
+      POSTGRES_PASSWORD: presales
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U presales -d presales_system"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://presales:presales@postgres:5432/presales_system
+      JWT_SECRET: change-me-before-shared-env
+      NEXT_PUBLIC_APP_URL: http://localhost:5000
+      NEXT_PUBLIC_API_URL: http://localhost:5000/api
+      DEV_TEST_SETUP_ENABLED: "false"
+      TEST_SECRET: disabled-in-compose
+    ports:
+      - "5000:5000"
+
+volumes:
+  postgres-data:

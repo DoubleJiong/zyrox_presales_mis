@@ -1,0 +1,54 @@
+{
+  "generatedAt": "2026-04-06T09:21:56.851Z",
+  "candidateCount": 8,
+  "rows": [
+    {
+      "id": 133,
+      "projectName": "中国石油大学(北京)智慧校园(三期)",
+      "region": "北京",
+      "projectAmount": 7200000
+    },
+    {
+      "id": 266,
+      "projectName": "哈尔滨体育学院智慧校园二期策划",
+      "region": "黑龙江",
+      "projectAmount": 7000000
+    },
+    {
+      "id": 330,
+      "projectName": "衢州教育局银校合作",
+      "region": "金华",
+      "projectAmount": 6800000
+    },
+    {
+      "id": 159,
+      "projectName": "大同大学物联校园项目",
+      "region": "山西",
+      "projectAmount": 6000000
+    },
+    {
+      "id": 397,
+      "projectName": "哈尔滨商业大学智慧校园",
+      "region": "黑龙江",
+      "projectAmount": 5500000
+    },
+    {
+      "id": 3,
+      "projectName": "智慧城市管理系统",
+      "region": "华北",
+      "projectAmount": 5000000
+    },
+    {
+      "id": 338,
+      "projectName": "太原师院学院二期单一来源采购项目",
+      "region": "山西",
+      "projectAmount": 4300000
+    },
+    {
+      "id": 162,
+      "projectName": "中国矿业大学徐海学院融合服务项目",
+      "region": "江苏",
+      "projectAmount": 4000000
+    }
+  ]
+}

@@ -1,0 +1,139 @@
+﻿[dotenv@17.2.3] injecting env (5) from .env.local -- tip: 馃攧 add secrets lifecycle management: https://dotenvx.com/ops
+{
+  "config": {
+    "configFile": "C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\playwright.config.ts",
+    "rootDir": "C:/Users/doubl/Desktop/甯傚満閮?2026/閮ㄩ棬淇℃伅鍖?presales_app/workspace/app_code/tests/e2e/playwright",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "C:/Users/doubl/Desktop/甯傚満閮?2026/閮ㄩ棬淇℃伅鍖?presales_app/workspace/app_code/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "C:/Users/doubl/Desktop/甯傚満閮?2026/閮ㄩ棬淇℃伅鍖?presales_app/workspace/app_code/tests/e2e/playwright",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 16,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "data-screen-formal.spec.ts",
+      "file": "data-screen-formal.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "data-screen formal validation",
+          "file": "data-screen-formal.spec.ts",
+          "line": 10,
+          "column": 6,
+          "specs": [
+            {
+              "title": "shows staged cockpit modules with API-aligned stats and canonical drill-through",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 30042,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m"
+                        },
+                        {
+                          "location": {
+                            "file": "C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\tests\\e2e\\playwright\\data-screen-formal.spec.ts",
+                            "column": 58,
+                            "line": 58
+                          },
+                          "message": "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('data-screen-tab-projects')\u001b[22m\n\u001b[2m    - locator resolved to <button data-active=\"true\" data-testid=\"data-screen-tab-projects\">鈥?/button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 脳 waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <button type=\"button\" title=\"鍞墠璐熻矗浜鸿鍥綷" data-active=\"false\" data-testid=\"data-screen-view-preset-presales-focus\">鍞墠璐熻矗浜鸿鍥?/button> from <div data-testid=\"data-screen-toolbar\">鈥?/div> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <button type=\"button\" title=\"鍞墠璐熻矗浜鸿鍥綷" data-active=\"false\" data-testid=\"data-screen-view-preset-presales-focus\">鍞墠璐熻矗浜鸿鍥?/button> from <div data-testid=\"data-screen-toolbar\">鈥?/div> subtree intercepts pointer events\u001b[22m\n\u001b[2m  2 脳 retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m      - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not stable\u001b[22m\n\u001b[2m  50 脳 retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\u001b[2m       - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <button type=\"button\" title=\"鍞墠璐熻矗浜鸿鍥綷" data-active=\"false\" data-testid=\"data-screen-view-preset-presales-focus\">鍞墠璐熻矗浜鸿鍥?/button> from <div data-testid=\"data-screen-toolbar\">鈥?/div> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n\n\n  56 |       await expect(page.getByTestId('data-screen-risk-alerts-link')).toContainText(`椋庨櫓鎬婚噺 ${riskSummary?.total || 0}`, { timeout: 20_000 });\n  57 |\n> 58 |       await page.getByTestId('data-screen-tab-projects').click();\n     |                                                          ^\n  59 |       await expect(page.getByTestId('data-screen-tab-projects')).toHaveAttribute('data-active', 'true');\n  60 |\n  61 |       await page.getByTestId('data-screen-view-preset-presales-focus').click();\n    at C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\tests\\e2e\\playwright\\data-screen-formal.spec.ts:58:58"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-04-06T01:24:50.190Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\doubl\\Desktop\\甯傚満閮╘\2026\\閮ㄩ棬淇℃伅鍖朶\presales_app\\workspace\\app_code\\test-results\\data-screen-formal-data-sc-a52cd-and-canonical-drill-through\\error-context.md"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "1ea6492c96183628a73c-fc699f4a208760ae329d",
+              "file": "data-screen-formal.spec.ts",
+              "line": 11,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-04-06T01:24:49.362Z",
+    "duration": 33561.398,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: presales-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-presales_system}
+      POSTGRES_USER: ${POSTGRES_USER:-presales}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-presales}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init/01-current-data.sql:/docker-entrypoint-initdb.d/01-current-data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-presales} -d ${POSTGRES_DB:-presales_system}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: ${APP_IMAGE:-presales-app:offline-5004}
+    container_name: presales-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5004
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-presales}:${POSTGRES_PASSWORD:-presales}@postgres:5432/${POSTGRES_DB:-presales_system}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://SERVER_HOST:5004}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://SERVER_HOST:5004/api}
+      DEV_TEST_SETUP_ENABLED: "false"
+      TEST_SECRET: disabled-in-offline-package
+    ports:
+      - "5004:5004"
+
+volumes:
+  postgres-data:

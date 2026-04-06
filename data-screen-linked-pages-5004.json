@@ -1,0 +1,57 @@
+[
+  {
+    "name": "data-screen",
+    "path": "/data-screen",
+    "readyTestId": "data-screen-page",
+    "ok": true,
+    "finalUrl": "http://localhost:5004/data-screen",
+    "title": "售前管理系统",
+    "bodySnippet": "(self.__next_f=self.__next_f||[]).push([0])self.__next_f.push([1,\"1:\\\"$Sreact.fragment\\\"\\n2:I[82578,[\\\"8984\\\",\\\"static/chunks/8984-5f5271e061a34ea7.js\\\",\\\"1063\\\",\\\"static/chunks/1063-ef9c520d8ecb8cca.js\\\",\\\"3326\\\",\\\"static/chunks/3326-94330eaddebfaed5.js\\\",\\\"2675\\\",\\\"static/chunks/2675-28d642d8ee126",
+    "consoleErrors": [],
+    "pageErrors": []
+  },
+  {
+    "name": "open-projects",
+    "path": "/projects?stage=opportunity",
+    "readyText": "��Ŀ",
+    "ok": true,
+    "finalUrl": "http://localhost:5004/projects?stage=opportunity",
+    "title": "售前管理系统",
+    "bodySnippet": "(self.__next_f=self.__next_f||[]).push([0])self.__next_f.push([1,\"1:\\\"$Sreact.fragment\\\"\\n2:I[82578,[\\\"8984\\\",\\\"static/chunks/8984-5f5271e061a34ea7.js\\\",\\\"1063\\\",\\\"static/chunks/1063-ef9c520d8ecb8cca.js\\\",\\\"3326\\\",\\\"static/chunks/3326-94330eaddebfaed5.js\\\",\\\"2675\\\",\\\"static/chunks/2675-28d642d8ee126",
+    "consoleErrors": [],
+    "pageErrors": []
+  },
+  {
+    "name": "risk-alerts",
+    "path": "/tasks?scope=mine&type=alert",
+    "readyText": "����",
+    "ok": true,
+    "finalUrl": "http://localhost:5004/tasks?scope=mine&type=alert",
+    "title": "售前管理系统",
+    "bodySnippet": "(self.__next_f=self.__next_f||[]).push([0])self.__next_f.push([1,\"1:\\\"$Sreact.fragment\\\"\\n2:I[82578,[\\\"8984\\\",\\\"static/chunks/8984-5f5271e061a34ea7.js\\\",\\\"1063\\\",\\\"static/chunks/1063-ef9c520d8ecb8cca.js\\\",\\\"3326\\\",\\\"static/chunks/3326-94330eaddebfaed5.js\\\",\\\"2675\\\",\\\"static/chunks/2675-28d642d8ee126",
+    "consoleErrors": [],
+    "pageErrors": []
+  },
+  {
+    "name": "workbench",
+    "path": "/workbench",
+    "readyText": "����̨",
+    "ok": true,
+    "finalUrl": "http://localhost:5004/workbench",
+    "title": "售前管理系统",
+    "bodySnippet": "(self.__next_f=self.__next_f||[]).push([0])self.__next_f.push([1,\"1:\\\"$Sreact.fragment\\\"\\n2:I[82578,[\\\"8984\\\",\\\"static/chunks/8984-5f5271e061a34ea7.js\\\",\\\"1063\\\",\\\"static/chunks/1063-ef9c520d8ecb8cca.js\\\",\\\"3326\\\",\\\"static/chunks/3326-94330eaddebfaed5.js\\\",\\\"2675\\\",\\\"static/chunks/2675-28d642d8ee126",
+    "consoleErrors": [],
+    "pageErrors": []
+  },
+  {
+    "name": "staff",
+    "path": "/staff",
+    "readyText": "Ա��",
+    "ok": true,
+    "finalUrl": "http://localhost:5004/staff",
+    "title": "售前管理系统",
+    "bodySnippet": "(self.__next_f=self.__next_f||[]).push([0])self.__next_f.push([1,\"1:\\\"$Sreact.fragment\\\"\\n2:I[82578,[\\\"8984\\\",\\\"static/chunks/8984-5f5271e061a34ea7.js\\\",\\\"1063\\\",\\\"static/chunks/1063-ef9c520d8ecb8cca.js\\\",\\\"3326\\\",\\\"static/chunks/3326-94330eaddebfaed5.js\\\",\\\"2675\\\",\\\"static/chunks/2675-28d642d8ee126",
+    "consoleErrors": [],
+    "pageErrors": []
+  }
+]

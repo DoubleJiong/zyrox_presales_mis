@@ -1,0 +1,46 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "release-build-webpack",
+			"type": "shell",
+			"command": "corepack",
+			"args": [
+				"pnpm",
+				"exec",
+				"next",
+				"build",
+				"--webpack"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "focused-unit-tests-stage-results",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"vitest",
+				"run",
+				"tests/unit/lib/stage-transitions.test.ts",
+				"tests/unit/lib/project-results.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "typecheck-current-app",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"tsc",
+				"-p",
+				"tsconfig.json",
+				"--noEmit"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		}
+	]
+}

@@ -1,0 +1,26 @@
+﻿
+> projects@0.1.0 verify:acceptance:5004 C:\Users\doubl\Desktop\甯傚満閮╘2026\閮ㄩ棬淇℃伅鍖朶presales_app\workspace\app_code
+> corepack pnpm run test:e2e:acceptance-sweep:5004
+
+
+> projects@0.1.0 test:e2e:acceptance-sweep:5004 C:\Users\doubl\Desktop\甯傚満閮╘2026\閮ㄩ棬淇℃伅鍖朶presales_app\workspace\app_code
+> powershell -Command "$env:PLAYWRIGHT_EXTERNAL_SERVER='1'; $env:PLAYWRIGHT_BASE_URL='http://localhost:5004'; node ./node_modules/@playwright/test/cli.js test tests/e2e/playwright/stability-sweep.spec.ts tests/e2e/playwright/data-screen-formal.spec.ts"
+
+[dotenv@17.2.3] injecting env (5) from .env.local -- tip: 馃攼 prevent committing .env to code: https://dotenvx.com/precommit
+
+Running 40 tests using 2 workers
+
+[dotenv@17.2.3] injecting env (0) from .env.local -- tip: 鈿欙笍  specify custom .env file path with { path: '/custom/path/.env' }
+  鉁?  2 tests\e2e\playwright\data-screen-formal.spec.ts:11:7 鈥?data-screen formal validation 鈥?shows staged cockpit modules with API-aligned stats and canonical drill-through (2.4s)
+  鉁?  1 tests\e2e\playwright\stability-sweep.spec.ts:24:7 鈥?stability sweep 鈥?creates a user from users management page (3.5s)
+  鉁?  3 tests\e2e\playwright\stability-sweep.spec.ts:66:7 鈥?stability sweep 鈥?creates a project from projects page (2.9s)
+  鉁?  4 tests\e2e\playwright\stability-sweep.spec.ts:112:7 鈥?stability sweep 鈥?associates a solution from project planning tab (1.8s)
+  鉁?  5 tests\e2e\playwright\stability-sweep.spec.ts:152:7 鈥?stability sweep 鈥?edits and deletes a user from users management page (1.9s)
+  鉁?  6 tests\e2e\playwright\stability-sweep.spec.ts:191:7 鈥?stability sweep 鈥?edits and deletes a project from projects page (7.5s)
+  鉁?  7 tests\e2e\playwright\stability-sweep.spec.ts:229:7 鈥?stability sweep 鈥?cancels a linked solution from project planning tab (2.1s)
+  鉁?  8 tests\e2e\playwright\stability-sweep.spec.ts:262:7 鈥?stability sweep 鈥?changes a user role from users management page (2.2s)
+  鉁?  9 tests\e2e\playwright\stability-sweep.spec.ts:312:7 鈥?stability sweep 鈥?creates edits and deletes a staff member from staff page (2.8s)
+  鉁? 10 tests\e2e\playwright\stability-sweep.spec.ts:367:7 鈥?stability sweep 鈥?manages data permissions from settings page (3.4s)
+  鉁? 11 tests\e2e\playwright\stability-sweep.spec.ts:423:7 鈥?stability sweep 鈥?manages roles from settings page (2.8s)
+  鉁? 12 tests\e2e\playwright\stability-sweep.spec.ts:477:7 鈥?stability sweep 鈥?shows live operation logs on system logs page (1.2s)
+  鉁? 13 tests\e2e\playwright\stability-sweep.spec.ts:511:7 鈥?stability sweep 鈥?shows data maintenance boundary on settings page (1.8s)
