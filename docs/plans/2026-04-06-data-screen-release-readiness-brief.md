@@ -14,12 +14,13 @@
 
 ## 2. 当前正式基线
 
-1. BUILD_ID：`QtQJ7V2Xl8fJVkIswY6tx`
+1. BUILD_ID：`h2ldgb7X394AARaJg-WCT`
 2. 运行口径：`next start -p 5004`
-3. 统一门禁：`verify:acceptance:5004 = 40 passed (1.6m)`
+3. 统一门禁：`verify:acceptance:5004 = 41 passed (1.6m)`
 4. focused cockpit spec：通过
 5. overview API contract：通过 `1/1`
 6. presales-focus API contract：通过 `2/2`
+7. repeated switching stability spec：通过
 
 ## 3. 当前结论
 
@@ -28,6 +29,7 @@
 1. 新角色视图切片已进入正式 webpack 产物，不再停留在 current-source 验证。
 2. 统一门禁已在 fresh formal runtime 上通过，说明稳定性扫与驾驶舱专项规格已重新对齐。
 3. 角色视图行为、默认 tab、专属读模型与当前计划文档一致。
+4. 数据大屏此前的高频切换挂页问题已完成前后端根因修复，并纳入正式自动化回归。
 
 ### 3.2 未完成项
 

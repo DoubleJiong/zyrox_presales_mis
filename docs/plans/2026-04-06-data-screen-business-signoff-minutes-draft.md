@@ -13,7 +13,7 @@
 | 会议地点 / 线上链接 |  |
 | 主持人 |  |
 | 记录人 |  |
-| BUILD_ID | `QtQJ7V2Xl8fJVkIswY6tx` |
+| BUILD_ID | `h2ldgb7X394AARaJg-WCT` |
 | 运行环境 | formal `next start -p 5004` |
 
 ## 2. 参会人员
@@ -46,6 +46,7 @@
 1. 管理层页面证据：`SS-01`、`SS-02` 已落档，证明管理层默认首屏、目标与预测、风险摘要及“区域金额贡献 TOP3”已形成正式页面证据。
 2. 经营负责人页面证据：`SS-03`、`SS-04`、`SS-05` 已落档，证明经营负责人整卡、风险提示与 `/projects?stage=opportunity` drill-through 已形成正式页面证据；当前采用 fourth-batch 后基线 `missingWinProbabilityCount=336`、`weightedPipeline=213313406`。
 3. 售前负责人页面证据：`SS-06`、`SS-07`、`SS-08` 已落档，证明 `totalSupportHours=18`、`activeSupportProjects=1`、`missingWorklogRecordCount=0` 及 `/staff` drill-through 已形成正式页面证据。
+4. 自动化门禁证据：`verify:acceptance:5004` 当前为 `41 passed (1.6m)`，已包含数据大屏“浙江省 / 全国”与热力图维度反复切换稳定性回归。
 
 ## 6. 本轮收口建议预填
 
