@@ -11,7 +11,8 @@
 7. [API 接口](#api-接口)
 8. [测试说明](#测试说明)
 9. [部署指南](#部署指南)
-10. [常见问题](#常见问题)
+10. [GitHub 备份](#github-备份)
+11. [常见问题](#常见问题)
 
 ---
 
@@ -200,6 +201,36 @@ curl http://localhost:5000/api/health/ready
 ```bash
 docker compose up --build
 ```
+
+### GitHub 代码备份
+
+项目已经初始化为 Git 仓库，并默认使用 `origin` 指向 GitHub 备份仓库。
+
+首次确认远端状态：
+
+```bash
+git remote -v
+git branch -vv
+```
+
+后续执行一键备份：
+
+```bash
+corepack pnpm run ops:backup:repo
+```
+
+可选：自定义提交说明。
+
+```bash
+powershell -ExecutionPolicy Bypass -File ./scripts/ops/backup-repo.ps1 -Message "backup: before release"
+```
+
+脚本行为：
+- 自动 `git add -A`
+- 有变更时自动提交
+- 已存在上游时直接 `git push`
+- 首次推送时自动执行 `git push -u origin <current-branch>`
+- 无变更时直接退出，不会产生空提交
 
 ---
 

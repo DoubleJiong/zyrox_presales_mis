@@ -41,6 +41,7 @@
     "verify:release-candidate": "corepack pnpm run verify:pr && corepack pnpm build && corepack pnpm run test:smoke",
     "verify:release": "corepack pnpm run verify:release-candidate && corepack pnpm run test:e2e",
     "ops:backup:db": "powershell -ExecutionPolicy Bypass -File ./scripts/ops/backup-database.ps1",
+    "ops:backup:repo": "powershell -ExecutionPolicy Bypass -File ./scripts/ops/backup-repo.ps1",
     "ops:restore:db": "powershell -ExecutionPolicy Bypass -File ./scripts/ops/restore-database.ps1",
     "vitest": "vitest",
     "test:data": "npx tsx tests/data-integrity/run-all-tests.ts",
