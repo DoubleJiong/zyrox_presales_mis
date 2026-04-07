@@ -14,9 +14,9 @@
 
 | 项目 | 当前值 | 说明 |
 | --- | --- | --- |
-| BUILD_ID | `QtQJ7V2Xl8fJVkIswY6tx` | 最新 webpack 正式产物 |
+| BUILD_ID | `h2ldgb7X394AARaJg-WCT` | 当前 5004 对应正式产物 |
 | formal runtime | `http://localhost:5004` | `next start -p 5004` |
-| 统一门禁 | `40 passed (1.6m)` | `verify:acceptance:5004` |
+| 统一门禁 | `41 passed (1.6m)` | `verify:acceptance:5004`，已包含数据大屏反复切换稳定性回归 |
 | focused cockpit spec | 通过 | `tests/e2e/playwright/data-screen-formal.spec.ts` |
 | overview API spec | 通过 `1/1` | `tests/api/data-screen/overview-route.test.ts` |
 | presales-focus API spec | 通过 `2/2` | `tests/api/data-screen/presales-focus-summary-route.test.ts` |
@@ -49,6 +49,17 @@
 
 1. 技术基线已经满足“可以开始业务对账”，不再受 build 或 formal runtime 阻塞。
 2. 真实业务样本结论尚未填写，因此本记录当前状态是“模板已建立、待业务陪跑补证”。
+
+## 5.1 2026-04-07 追认基线
+
+在 `BUILD_ID=h2ldgb7X394AARaJg-WCT` 的当前 5004 正式运行时上，已补充完成一轮重新验收：
+
+1. `/api/health` 返回 `200 alive`，formal runtime 当前可直接用于业务陪跑。
+2. `verify:acceptance:5004` 最新结果为 `41 passed (1.6m)`。
+3. 新增稳定性回归已纳入 `tests/e2e/playwright/data-screen-formal.spec.ts`：
+	- 反复切换“浙江省 / 全国”
+	- 反复切换热力图维度
+4. 当前技术口径可确认：数据大屏此前的切换挂页问题已纳入正式自动化门禁，不再仅依赖人工点测。
 
 ## 6. 首轮陪跑基线补充
 

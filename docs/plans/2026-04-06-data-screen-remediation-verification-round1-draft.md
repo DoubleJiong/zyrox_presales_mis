@@ -153,7 +153,7 @@
 | 页面截图 | 每个关键场景至少保留正式页面截图并标注路径 | 已补 `SS-01` 至 `SS-08` |
 | 接口响应 | `/api/data-screen/overview`、`/api/data-screen/presales-focus-summary` 对应字段前后值 | 已补 API 关键字段 |
 | 数据库事实 | 源记录回填前后查询结果 | 已补 DB 回填结果 |
-| 自动化背景 | 当前技术基线沿用 `verify:acceptance:5004` | 已重新验证 `40 passed (1.6m)` |
+| 自动化背景 | 当前技术基线沿用 `verify:acceptance:5004` | 已重新验证 `41 passed (1.6m)` |
 
 ### 5.1 页面截图证据索引
 
@@ -179,3 +179,10 @@
 1. 将本轮结论同步到 `docs/plans/2026-04-06-data-screen-metric-reconciliation-record.md` 与 `docs/plans/2026-04-06-data-screen-issue-ledger.md`。
 2. 若仍需继续压低经营缺口，可再启动新的高金额样本批次。
 3. 页面截图证据已补齐，当前可直接进入业务签字纪要与陪跑确认。
+
+## 8. 2026-04-07 技术追认
+
+1. 当前 formal BUILD_ID 已更新为 `h2ldgb7X394AARaJg-WCT`。
+2. `verify:acceptance:5004` 最新结果为 `41 passed (1.6m)`。
+3. 该门禁已包含数据大屏“浙江省 / 全国”反复切换和热力图维度反复切换稳定性回归。
+4. 因此本初稿中涉及数据大屏切换挂页的技术风险，现已从待确认问题转为已修复并完成自动化门禁覆盖。
