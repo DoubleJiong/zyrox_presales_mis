@@ -232,6 +232,86 @@ powershell -ExecutionPolicy Bypass -File ./scripts/ops/backup-repo.ps1 -Message 
 - 首次推送时自动执行 `git push -u origin <current-branch>`
 - 无变更时直接退出，不会产生空提交
 
+### 新机器恢复 / Clone
+
+如果更换开发机器，建议按下面顺序恢复项目。
+
+1. 克隆仓库。
+
+```bash
+git clone https://github.com/DoubleJiong/zyrox_presales_mis.git
+cd zyrox_presales_mis
+```
+
+2. 启用 corepack 并安装依赖。
+
+```bash
+corepack enable
+corepack pnpm install
+```
+
+3. 准备环境变量。
+
+```bash
+copy .env.example .env.local
+```
+
+然后按当前环境填写至少这些变量：
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_API_URL`
+- 以及对象存储、测试开关等当前环境确实需要的变量
+
+4. 初始化数据库。
+
+已有数据库且需要先登记历史基线时：
+
+```bash
+corepack pnpm db:migrate:list
+corepack pnpm db:migrate -- --baseline-through 006_add_idempotency_keys.sql
+```
+
+空库或确认可以直接执行全部迁移时：
+
+```bash
+corepack pnpm db:migrate -- --all
+```
+
+5. 启动项目。
+
+```bash
+corepack pnpm dev
+```
+
+如果要跑生产构建验证：
+
+```bash
+corepack pnpm build
+corepack pnpm start
+```
+
+6. 运行最小健康检查。
+
+```bash
+corepack pnpm run typecheck
+curl http://localhost:5000/api/health
+```
+
+7. 可选：恢复后立即确认 Git 备份链路正常。
+
+```bash
+git remote -v
+git branch -vv
+corepack pnpm run ops:backup:repo
+```
+
+恢复注意事项：
+- `.env.local` 不会进入 Git，需要手工补齐或从安全渠道获取。
+- `node_modules`、`.next`、测试产物和日志默认不会从仓库恢复，这是预期行为。
+- 如果数据库、对象存储或外部服务地址与旧机器不同，需要同步更新 `.env.local`。
+- 如果只想拉代码做只读查看，可以跳过数据库迁移和启动步骤。
+
 ---
 
 ## 项目结构
