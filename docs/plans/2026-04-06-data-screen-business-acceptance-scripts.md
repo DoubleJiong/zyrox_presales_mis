@@ -25,7 +25,7 @@
 
 1. 管理层、销售负责人、售前负责人三类角色的首屏是否真的回答了各自最关心的问题。
 2. 首屏卡片、角色面板、钻取入口与接口口径是否一致。
-3. 正式运行路径是否以最新 webpack 产物 `.next/BUILD_ID=QtQJ7V2Xl8fJVkIswY6tx` 为准，而不是只依赖 current-source 临时验证。
+3. 正式运行路径是否以最新 webpack 产物 `.next/BUILD_ID=h2ldgb7X394AARaJg-WCT` 为准，而不是只依赖 current-source 临时验证。
 
 ## 2. 验收原则
 
@@ -40,9 +40,15 @@
 
 1. webpack 正式产物：`.next/BUILD_ID=QtQJ7V2Xl8fJVkIswY6tx`
 2. 正式运行口径：`next start -p 5004`
-3. 统一门禁结果：`verify:acceptance:5004 = 40 passed (1.6m)`
-4. focused 浏览器规格：`tests/e2e/playwright/data-screen-formal.spec.ts` 已覆盖角色视图切换、预测、风险、漏斗与 drill-through
+3. 统一门禁结果：`verify:acceptance:5004 = 41 passed (1.6m)`
+4. focused 浏览器规格：`tests/e2e/playwright/data-screen-formal.spec.ts` 已覆盖角色视图切换、预测、风险、漏斗、drill-through 与 repeated switching 稳定性回归
 5. focused API 规格：`tests/api/data-screen/overview-route.test.ts` 与 `tests/api/data-screen/presales-focus-summary-route.test.ts` 已覆盖经营漏斗与售前负责人专属读模型
+
+其中 repeated switching 稳定性回归明确覆盖：
+
+1. 反复切换“浙江省 / 全国”
+2. 反复切换热力图维度
+3. 页面不应跳入全局错误页
 
 ## 4. 管理层验收脚本
 
@@ -150,5 +156,5 @@
 ## 8. 当前结论
 
 1. 三类角色的验收脚本已具备可执行版本，可以直接用于业务陪跑。
-2. 当前脚本依赖的技术基线已在正式产物 `.next/BUILD_ID=QtQJ7V2Xl8fJVkIswY6tx` 上通过。
+2. 当前脚本依赖的技术基线已在正式产物 `.next/BUILD_ID=h2ldgb7X394AARaJg-WCT` 上通过。
 3. 下一步不再是补脚本，而是基于真实业务账号和真实样本填写补录复验记录、问题台账和签字纪要。
