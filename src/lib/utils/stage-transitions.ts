@@ -404,6 +404,13 @@ export function canAccessSettlementTab(currentStage: ProjectStage): boolean {
 }
 
 /**
+ * 判断实施方案选项卡是否可访问（交付准备中、执行中及之后阶段）
+ */
+export function canAccessImplementationPlanTab(currentStage: ProjectStage): boolean {
+  return ['delivery_preparing', 'delivering', 'execution', 'acceptance', 'settlement', 'archived'].includes(currentStage);
+}
+
+/**
  * 获取应该显示的选项卡列表
  */
 export function getVisibleTabs(stage: ProjectStage, status: ProjectStatus): string[] {

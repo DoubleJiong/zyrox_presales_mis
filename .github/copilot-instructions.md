@@ -4,6 +4,18 @@ This workspace contains an AI-generated presales system that is being governed t
 
 ## Default Rule
 
+When the task is about 团队执行驾驶舱、团队协同驾驶舱、管理工作台、领导视角任务驾驶舱、team execution cockpit、manager cockpit、执行驾驶舱 V1 落地、按任务卡开始做驾驶舱, first load:
+
+- `.github/skills/presales-team-execution-cockpit-delivery/SKILL.md`
+
+Then continue under the existing governance skills it references.
+
+When the task is about 数据大屏二期、领导驾驶舱升级、区域视角、人员视角、专题视角、浙江地图修复、data-screen phase 2、统一大屏入口、heatmap 修复、按任务卡开始做数据大屏, first load:
+
+- `.github/skills/presales-data-screen-cockpit-upgrade/SKILL.md`
+
+Then continue under the governance and module-evolution skills it references.
+
 When the task is about a larger cross-module redesign or end-to-end delegated delivery such as 工作台/日程管理/任务管理/消息中心整体重构、模块体系重做、设计到开发到测试到上线、全权交给你持续推进, first load:
 
 - `.github/skills/presales-module-evolution-program/SKILL.md`

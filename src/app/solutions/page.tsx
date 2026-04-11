@@ -49,8 +49,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Search, Plus, Eye, Loader2, Check, AlertCircle, 
   FileText, Download, Clock, User, Filter, FolderOpen, BookOpen,
-  LayoutGrid, List, Sparkles, Clock4, FileStack
+  LayoutGrid, List, Sparkles, Clock4, FileStack, ChevronLeft, ChevronRight
 } from 'lucide-react';
+
+const ITEMS_PER_PAGE = 10;
 
 interface Solution {
   id: number;
@@ -157,6 +159,7 @@ function SolutionsPageContent() {
   // 新增：视图模式和快捷筛选
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+  const [currentPage, setCurrentPage] = useState(1);
   
   // V3.0: 方案分类筛选
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
@@ -298,6 +301,23 @@ function SolutionsPageContent() {
 
     return result;
   }, [solutions, search, statusFilter, typeFilter, quickFilter, currentUserId, categoryFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSolutions.length / ITEMS_PER_PAGE));
+
+  const paginatedSolutions = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredSolutions.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [currentPage, filteredSolutions]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, typeFilter, quickFilter, categoryFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   // 状态徽章
   const getStatusBadge = useCallback((status: string) => {
@@ -456,7 +476,7 @@ function SolutionsPageContent() {
   // 渲染卡片视图
   const renderCardView = () => (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {filteredSolutions.map((solution) => (
+      {paginatedSolutions.map((solution) => (
         <Card 
           key={solution.id}
           data-testid={`solution-card-${solution.id}`}
@@ -545,7 +565,7 @@ function SolutionsPageContent() {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {filteredSolutions.map((solution) => (
+        {paginatedSolutions.map((solution) => (
           <TableRow 
             key={solution.id}
             data-testid={`solution-row-${solution.id}`}
@@ -605,7 +625,7 @@ function SolutionsPageContent() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">解决方案中心</h1>
-          <p className="text-muted-foreground">管理售前方案、浏览知识库文档</p>
+          <p className="text-muted-foreground">管理售前方案、浏览方案库资产</p>
         </div>
         
         {/* 新建方案弹窗 */}
@@ -758,7 +778,7 @@ function SolutionsPageContent() {
           </TabsTrigger>
           <TabsTrigger value="knowledge" className="flex items-center gap-2">
             <BookOpen className="h-4 w-4" />
-            知识库
+            方案库
           </TabsTrigger>
         </TabsList>
 
@@ -891,6 +911,62 @@ function SolutionsPageContent() {
               ) : (
                 viewMode === 'card' ? renderCardView() : renderTableView()
               )}
+
+              {totalPages > 1 && (
+                <nav aria-label="pagination" data-testid="solutions-pagination" className="flex items-center justify-between border-t pt-4 mt-4">
+                  <div className="text-sm text-muted-foreground">
+                    显示 {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredSolutions.length)} 条，共 {filteredSolutions.length} 条
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3"
+                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                      disabled={currentPage === 1}
+                      data-testid="solutions-pagination-prev-button"
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      上一页
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                        if (
+                          page === 1 ||
+                          page === totalPages ||
+                          (page >= currentPage - 1 && page <= currentPage + 1)
+                        ) {
+                          return (
+                            <Button
+                              key={page}
+                              variant={currentPage === page ? 'default' : 'outline'}
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => setCurrentPage(page)}
+                            >
+                              {page}
+                            </Button>
+                          );
+                        } else if (page === currentPage - 2 || page === currentPage + 2) {
+                          return <span key={page} className="text-muted-foreground">...</span>;
+                        }
+                        return null;
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3"
+                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                      disabled={currentPage === totalPages}
+                      data-testid="solutions-pagination-next-button"
+                    >
+                      下一页
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                </nav>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -948,7 +1024,7 @@ function SolutionsPageContent() {
           {/* 知识库列表 */}
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              共找到 <span className="font-medium text-foreground">{knowledgePagination.total}</span> 篇文档
+              共找到 <span className="font-medium text-foreground">{knowledgePagination.total}</span> 条方案库记录
             </p>
 
             {knowledgeLoading ? (
@@ -960,78 +1036,111 @@ function SolutionsPageContent() {
               <Card>
                 <CardContent className="py-12 text-center">
                   <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">暂无相关文档</p>
+                  <p className="text-muted-foreground">暂无相关方案</p>
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {knowledgeList.map((item) => (
-                  <Card 
-                    key={item.id} 
-                    className="cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => router.push(`/solutions/${item.id}`)}
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="text-base line-clamp-2 flex-1">
-                          {item.solutionName}
-                        </CardTitle>
-                        {item.isTemplate && (
-                          <Badge variant="secondary" className="ml-2 shrink-0">模板</Badge>
-                        )}
-                      </div>
-                      <CardDescription className="line-clamp-2">
-                        {item.description || '暂无描述'}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          {item.typeName && (
-                            <Badge variant="outline" className="text-xs">{item.typeName}</Badge>
-                          )}
-                          {item.industry && (
-                            <Badge variant="outline" className="text-xs">{item.industry}</Badge>
+              <>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {knowledgeList.map((item) => (
+                    <Card 
+                      key={item.id} 
+                      className="cursor-pointer hover:shadow-md transition-shadow"
+                      onClick={() => router.push(`/solutions/${item.id}`)}
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <CardTitle className="text-base line-clamp-2 flex-1">
+                            {item.solutionName}
+                          </CardTitle>
+                          {item.isTemplate && (
+                            <Badge variant="secondary" className="ml-2 shrink-0">模板</Badge>
                           )}
                         </div>
-
-                        {item.tags && item.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {item.tags.slice(0, 3).map((tag, index) => (
-                              <Badge key={index} variant="secondary" className="text-xs">{tag}</Badge>
-                            ))}
-                            {item.tags.length > 3 && (
-                              <Badge variant="secondary" className="text-xs">+{item.tags.length - 3}</Badge>
+                        <CardDescription className="line-clamp-2">
+                          {item.description || '暂无描述'}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            {item.typeName && (
+                              <Badge variant="outline" className="text-xs">{item.typeName}</Badge>
+                            )}
+                            {item.industry && (
+                              <Badge variant="outline" className="text-xs">{item.industry}</Badge>
                             )}
                           </div>
-                        )}
 
-                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-                          <div className="flex items-center gap-3">
-                            <span className="flex items-center gap-1">
-                              <Eye className="h-3 w-3" />
-                              {item.viewCount}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Download className="h-3 w-3" />
-                              {item.downloadCount}
-                            </span>
+                          {item.tags && item.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {item.tags.slice(0, 3).map((tag, index) => (
+                                <Badge key={index} variant="secondary" className="text-xs">{tag}</Badge>
+                              ))}
+                              {item.tags.length > 3 && (
+                                <Badge variant="secondary" className="text-xs">+{item.tags.length - 3}</Badge>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                            <div className="flex items-center gap-3">
+                              <span className="flex items-center gap-1">
+                                <Eye className="h-3 w-3" />
+                                {item.viewCount}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Download className="h-3 w-3" />
+                                {item.downloadCount}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              {item.authorName || '未知'}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {item.authorName || '未知'}
+
+                          <div className="flex items-center text-xs text-muted-foreground">
+                            <Clock className="h-3 w-3 mr-1" />
+                            {formatDate(item.publishDate || item.createdAt)}
                           </div>
                         </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
 
-                        <div className="flex items-center text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3 mr-1" />
-                          {formatDate(item.publishDate || item.createdAt)}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                {knowledgePagination.totalPages > 1 && (
+                  <div className="flex items-center justify-between border-t pt-4 mt-4">
+                    <p className="text-sm text-muted-foreground">
+                      显示 {((knowledgePagination.page - 1) * 10) + 1} - {Math.min(knowledgePagination.page * 10, knowledgePagination.total)} 条，共 {knowledgePagination.total} 条
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchKnowledge(Math.max(1, knowledgePagination.page - 1))}
+                        disabled={knowledgePagination.page === 1}
+                        data-testid="knowledge-pagination-prev-button"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm text-muted-foreground min-w-[88px] text-center">
+                        第 {knowledgePagination.page} / {knowledgePagination.totalPages} 页
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchKnowledge(Math.min(knowledgePagination.totalPages, knowledgePagination.page + 1))}
+                        disabled={knowledgePagination.page === knowledgePagination.totalPages}
+                        data-testid="knowledge-pagination-next-button"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </TabsContent>

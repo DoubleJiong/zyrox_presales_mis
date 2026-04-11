@@ -26,6 +26,7 @@ export interface CreateSolutionReviewApprovalInput {
 
 export interface SubmitSolutionReviewApprovalInput {
   reviewId: number;
+  operatorId: number;
   reviewStatus: 'approved' | 'rejected' | 'revision_required';
   reviewComment?: string;
   reviewScore?: number;
@@ -250,6 +251,10 @@ export async function submitSolutionReviewApproval(input: SubmitSolutionReviewAp
     throw new SolutionReviewApprovalError('评审已结束');
   }
 
+  if (review.reviewerId !== input.operatorId) {
+    throw new SolutionReviewApprovalError('只有当前评审人可以提交评审结果');
+  }
+
   const solution = await getSolutionContext(review.solutionId);
 
   if (!solution) {
@@ -311,7 +316,7 @@ export async function submitSolutionReviewApproval(input: SubmitSolutionReviewAp
   await createApprovalEvent({
     approvalRequestId: approvalRequest.id,
     eventType: decision,
-    operatorId: review.reviewerId,
+    operatorId: input.operatorId,
     payload: {
       reviewId: review.id,
       solutionId: review.solutionId,
@@ -328,7 +333,7 @@ export async function submitSolutionReviewApproval(input: SubmitSolutionReviewAp
       await transitionProjectStage({
         projectId: solution.projectId,
         toStage: decision === 'approved' ? 'contract_pending' : 'bidding',
-        operatorId: review.reviewerId,
+        operatorId: input.operatorId,
         triggerType: decision === 'approved' ? 'approval_approved' : 'approval_rejected',
         triggerId: approvalRequest.id,
         reason: decision === 'approved' ? '方案评审通过' : '方案评审驳回',

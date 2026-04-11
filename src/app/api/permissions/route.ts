@@ -35,6 +35,10 @@ const PERMISSION_DEFINITIONS = [
   // 系统设置
   { id: 21, code: 'settings:read', name: '查看设置', module: 'settings', description: '可以查看系统设置' },
   { id: 22, code: 'settings:update', name: '修改设置', module: 'settings', description: '可以修改系统设置' },
+  // 数据大屏
+  { id: 23, code: 'datascreen:view', name: '查看数据大屏', module: 'datascreen', description: '可以查看数据大屏主页' },
+  { id: 24, code: 'datascreen:export', name: '导出大屏数据', module: 'datascreen', description: '可以导出数据大屏数据' },
+  { id: 25, code: 'team-execution-cockpit:view', name: '查看团队执行驾驶舱', module: 'datascreen', description: '可以访问团队执行驾驶舱' },
   // 全部权限
   { id: 99, code: '*', name: '全部权限', module: 'system', description: '拥有所有权限' },
 ];

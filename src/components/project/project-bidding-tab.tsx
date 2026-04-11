@@ -95,9 +95,9 @@ interface ProjectBiddingTabProps {
 }
 
 const PROPOSAL_TYPE_OPTIONS = [
-  { value: 'technical', label: '技术标' },
-  { value: 'commercial', label: '商务标' },
-  { value: 'qualification', label: '资格标' },
+  { value: 'technical', label: '技术标书' },
+  { value: 'commercial', label: '商务标书' },
+  { value: 'qualification', label: '资格标书' },
 ];
 
 const PROPOSAL_STATUS_OPTIONS = [
@@ -347,7 +347,7 @@ export function ProjectBiddingTab({ projectId, readOnly = false, canManageMember
   // 投标方案操作
   const handleSaveProposal = async () => {
     if (!proposalForm.name) {
-      toast({ title: '请填写方案名称', variant: 'destructive' });
+      toast({ title: '请填写标书名称', variant: 'destructive' });
       return;
     }
     
@@ -356,7 +356,12 @@ export function ProjectBiddingTab({ projectId, readOnly = false, canManageMember
       const url = `/api/projects/${projectId}/bidding-proposals${editingProposal ? `/${editingProposal.id}` : ''}`;
       const method = editingProposal ? 'put' : 'post';
       
-      const response = await apiClient[method](url, proposalForm);
+      const normalizedProposalForm = {
+        ...proposalForm,
+        progress: proposalForm.status === 'completed' ? 100 : proposalForm.progress,
+      };
+
+      const response = await apiClient[method](url, normalizedProposalForm);
       
       if ((response.data as any)?.success) {
         toast({ title: editingProposal ? '更新成功' : '创建成功' });
@@ -409,6 +414,10 @@ export function ProjectBiddingTab({ projectId, readOnly = false, canManageMember
   const getProposalStatusLabel = (status: string) => {
     const option = PROPOSAL_STATUS_OPTIONS.find(o => o.value === status);
     return option?.label || status;
+  };
+
+  const getProposalDisplayProgress = (proposal: BiddingProposal) => {
+    return proposal.status === 'completed' ? 100 : proposal.progress;
   };
 
   return (
@@ -770,12 +779,12 @@ export function ProjectBiddingTab({ projectId, readOnly = false, canManageMember
       <Dialog open={proposalDialogOpen} onOpenChange={setProposalDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingProposal ? '编辑投标方案' : '创建投标方案'}</DialogTitle>
-            <DialogDescription>管理投标文件编制进度</DialogDescription>
+            <DialogTitle>{editingProposal ? '编辑投标文件' : '创建投标文件'}</DialogTitle>
+            <DialogDescription>管理标书编制进度</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label>方案名称 *</Label>
+              <Label>标书名称 *</Label>
               <Input
                 data-testid="bidding-proposal-name-input"
                 value={proposalForm.name}
@@ -785,7 +794,7 @@ export function ProjectBiddingTab({ projectId, readOnly = false, canManageMember
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>方案类型</Label>
+                <Label>标书类型</Label>
                 <Select
                   value={proposalForm.type}
                   onValueChange={(value) => setProposalForm({ ...proposalForm, type: value })}
@@ -804,7 +813,11 @@ export function ProjectBiddingTab({ projectId, readOnly = false, canManageMember
                 <Label>状态</Label>
                 <Select
                   value={proposalForm.status}
-                  onValueChange={(value) => setProposalForm({ ...proposalForm, status: value })}
+                  onValueChange={(value) => setProposalForm({
+                    ...proposalForm,
+                    status: value,
+                    progress: value === 'completed' ? 100 : proposalForm.progress,
+                  })}
                 >
                   <SelectTrigger data-testid="bidding-proposal-status-trigger">
                     <SelectValue placeholder="选择状态" />
@@ -825,8 +838,9 @@ export function ProjectBiddingTab({ projectId, readOnly = false, canManageMember
                   min="0"
                   max="100"
                   data-testid="bidding-proposal-progress-input"
-                  value={proposalForm.progress}
-                  onChange={(e) => setProposalForm({ ...proposalForm, progress: parseInt(e.target.value) || 0 })}
+                  value={proposalForm.status === 'completed' ? 100 : proposalForm.progress}
+                  disabled={proposalForm.status === 'completed'}
+                  onChange={(e) => setProposalForm({ ...proposalForm, progress: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
                 />
               </div>
               <div className="space-y-2">

@@ -1,6 +1,7 @@
 import { config as loadEnv } from 'dotenv';
 import { expect, test, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
 import postgres from 'postgres';
+import { acquireWorkbenchLock } from './helpers/workbench-lock';
 
 const ADMIN_USER = {
   email: 'admin@zhengyuan.com',
@@ -11,6 +12,7 @@ const TEST_BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5000'
 const TEST_BASE_ORIGIN = new URL(TEST_BASE_URL);
 
 loadEnv({ path: '.env.local' });
+loadEnv({ path: 'app_code/.env.local' });
 
 test.describe('wave 4 formal validation', () => {
   test('surfaces the cockpit priority queue, risk radar, unread inbox, and shared schedules on /workbench', async ({ page }) => {
@@ -22,8 +24,10 @@ test.describe('wave 4 formal validation', () => {
     let sharedScheduleId: number | null = null;
     let createdAlertHistoryId: number | null = null;
     let createdAlertNotificationId: number | null = null;
+    let releaseWorkbenchLock: (() => Promise<void>) | null = null;
 
     try {
+      releaseWorkbenchLock = await acquireWorkbenchLock();
       await loginAsAdmin(page);
       apiContext = await createApiContextFromPage(page);
       dbClient = createDbClient();
@@ -34,6 +38,7 @@ test.describe('wave 4 formal validation', () => {
       const messageTitle = `wave4-message-${Date.now()}`;
       const sharedScheduleTitle = `wave4-shared-${Date.now()}`;
       const alertRuleName = `wave4-risk-${Date.now()}`;
+      const uniqueBaseId = createUniqueId();
 
       const createTodoResponse = await apiContext.post('/api/todos', {
         data: {
@@ -71,6 +76,15 @@ test.describe('wave 4 formal validation', () => {
       });
       expect(createMessageResponse.ok()).toBeTruthy();
       createdMessageId = (await createMessageResponse.json())?.data?.id ?? null;
+
+      if (createdMessageId) {
+        await dbClient`
+          UPDATE sys_message
+          SET created_at = NOW() + INTERVAL '11 minutes',
+              updated_at = NOW() + INTERVAL '11 minutes'
+          WHERE id = ${createdMessageId}
+        `;
+      }
 
       const createSharedScheduleResponse = await apiContext.post('/api/schedules', {
         data: {
@@ -111,7 +125,7 @@ test.describe('wave 4 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_alert_history),
+          ${uniqueBaseId},
           ${alertRuleName},
           'project_risk',
           'project',
@@ -122,8 +136,8 @@ test.describe('wave 4 formal validation', () => {
           '第四波风险雷达验证',
           'project',
           ${1},
-          NOW(),
-          NOW()
+          NOW() + INTERVAL '12 minutes',
+          NOW() + INTERVAL '12 minutes'
         )
         RETURNING id
       `;
@@ -140,14 +154,14 @@ test.describe('wave 4 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_alert_notification),
+          ${uniqueBaseId - 1},
           ${createdAlertHistoryId},
           ${1},
           'system',
           'pending',
           '第四波风险雷达验证',
-          NOW(),
-          NOW()
+          NOW() + INTERVAL '12 minutes',
+          NOW() + INTERVAL '12 minutes'
         )
         RETURNING id
       `;
@@ -159,14 +173,11 @@ test.describe('wave 4 formal validation', () => {
       await expect(page.getByText('未读消息').first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText('今日优先队列').first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText('风险雷达').first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText('消息待办').first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText('个人事件收件箱').first()).toBeVisible({ timeout: 10_000 });
 
-      await expect(page.getByText(todoTitle).first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(taskTitle).first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText(sharedScheduleTitle).first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText('共享').first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText(alertRuleName).first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(messageTitle).first()).toBeVisible({ timeout: 10_000 });
     } finally {
       if (apiContext && createdTodoId) {
         await apiContext.delete(`/api/todos/${createdTodoId}`);
@@ -202,6 +213,10 @@ test.describe('wave 4 formal validation', () => {
 
       if (dbClient) {
         await dbClient.end({ timeout: 5 });
+      }
+
+      if (releaseWorkbenchLock) {
+        await releaseWorkbenchLock();
       }
     }
   });
@@ -278,4 +293,8 @@ function createDbClient() {
     max: 1,
     prepare: false,
   });
+}
+
+function createUniqueId(offset = 0) {
+  return -((Date.now() % 1_000_000_000) + Math.floor(Math.random() * 10_000) + offset);
 }

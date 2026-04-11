@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import { 
   Calendar,
   User,
@@ -17,31 +17,37 @@ import {
   Download,
   Share2,
   Printer,
+  Loader2,
+  Pencil,
+  Save,
+  X,
 } from 'lucide-react';
 
 // 周报详情接口
-interface WeeklyReportDetail {
+export interface WeeklyReportContent {
+  summary: string;
+  statistics: {
+    newCustomers: number;
+    followUpCount: number;
+    projectProgress: number;
+    taskCompleted: number;
+    opportunityCount: number;
+    biddingCount: number;
+  };
+  highlights: string[];
+  nextWeekPlan: string[];
+  issues: string[];
+  supportNeeds: string[];
+}
+
+export interface WeeklyReportDetail {
   id: number;
   type: string;
   userId: number | null;
   userName: string | null;
   weekStart: string;
   weekEnd: string;
-  content: {
-    summary: string;
-    statistics: {
-      newCustomers: number;
-      followUpCount: number;
-      projectProgress: number;
-      taskCompleted: number;
-      opportunityCount: number;
-      biddingCount: number;
-    };
-    highlights: string[];
-    nextWeekPlan: string[];
-    issues: string[];
-    supportNeeds: string[];
-  };
+  content: WeeklyReportContent;
   generatedAt: string;
   sentAt: string | null;
   sent: boolean;
@@ -54,6 +60,13 @@ interface WeeklyReportDetail {
 
 interface ReportViewerProps {
   report: WeeklyReportDetail;
+  editableContent?: WeeklyReportContent;
+  isEditing?: boolean;
+  isSaving?: boolean;
+  onEdit?: () => void;
+  onSave?: () => void;
+  onCancelEdit?: () => void;
+  onContentChange?: (content: WeeklyReportContent) => void;
   onExport?: () => void;
   onShare?: () => void;
   onPrint?: () => void;
@@ -62,12 +75,31 @@ interface ReportViewerProps {
 
 export function ReportViewer({
   report,
+  editableContent,
+  isEditing = false,
+  isSaving = false,
+  onEdit,
+  onSave,
+  onCancelEdit,
+  onContentChange,
   onExport,
   onShare,
   onPrint,
   className,
 }: ReportViewerProps) {
   const weekNumber = getWeekNumber(new Date(report.weekStart));
+  const content = editableContent ?? report.content;
+
+  const updateContent = (patch: Partial<WeeklyReportContent>) => {
+    if (!onContentChange) {
+      return;
+    }
+
+    onContentChange({
+      ...content,
+      ...patch,
+    });
+  };
 
   return (
     <div className={cn('space-y-6', className)}>
@@ -103,6 +135,23 @@ export function ReportViewer({
         </div>
 
         <div className="flex items-center gap-2">
+          {isEditing ? (
+            <>
+              <Button variant="outline" size="sm" onClick={onCancelEdit} disabled={isSaving}>
+                <X className="h-4 w-4 mr-1" />
+                取消
+              </Button>
+              <Button size="sm" onClick={onSave} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                保存
+              </Button>
+            </>
+          ) : onEdit ? (
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              <Pencil className="h-4 w-4 mr-1" />
+              编辑
+            </Button>
+          ) : null}
           <Button variant="outline" size="sm" onClick={onPrint}>
             <Printer className="h-4 w-4 mr-1" />
             打印
@@ -158,14 +207,23 @@ export function ReportViewer({
           <CardTitle className="text-lg">本周工作总结</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {report.content.summary}
-          </p>
+          {isEditing ? (
+            <Textarea
+              value={content.summary}
+              onChange={(event) => updateContent({ summary: event.target.value })}
+              className="min-h-32 text-sm"
+              placeholder="请输入本周工作总结"
+            />
+          ) : (
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {content.summary}
+            </p>
+          )}
         </CardContent>
       </Card>
 
       {/* 工作亮点 */}
-      {report.content.highlights.length > 0 && (
+      {(isEditing || content.highlights.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -174,20 +232,29 @@ export function ReportViewer({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
-              {report.content.highlights.map((highlight, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm">
-                  <span className="text-success mt-0.5">•</span>
-                  <span>{highlight}</span>
-                </li>
-              ))}
-            </ul>
+            {isEditing ? (
+              <Textarea
+                value={toTextareaValue(content.highlights)}
+                onChange={(event) => updateContent({ highlights: parseLines(event.target.value) })}
+                className="min-h-28 text-sm"
+                placeholder="每行一条工作亮点"
+              />
+            ) : (
+              <ul className="space-y-2">
+                {content.highlights.map((highlight, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm">
+                    <span className="text-success mt-0.5">•</span>
+                    <span>{highlight}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       )}
 
       {/* 风险与问题 */}
-      {report.content.issues.length > 0 && (
+      {(isEditing || content.issues.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -196,14 +263,23 @@ export function ReportViewer({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
-              {report.content.issues.map((issue, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm">
-                  <span className="text-warning mt-0.5">•</span>
-                  <span>{issue}</span>
-                </li>
-              ))}
-            </ul>
+            {isEditing ? (
+              <Textarea
+                value={toTextareaValue(content.issues)}
+                onChange={(event) => updateContent({ issues: parseLines(event.target.value) })}
+                className="min-h-28 text-sm"
+                placeholder="每行一条风险或问题"
+              />
+            ) : (
+              <ul className="space-y-2">
+                {content.issues.map((issue, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm">
+                    <span className="text-warning mt-0.5">•</span>
+                    <span>{issue}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       )}
@@ -217,9 +293,16 @@ export function ReportViewer({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {report.content.nextWeekPlan.length > 0 ? (
+          {isEditing ? (
+            <Textarea
+              value={toTextareaValue(content.nextWeekPlan)}
+              onChange={(event) => updateContent({ nextWeekPlan: parseLines(event.target.value) })}
+              className="min-h-28 text-sm"
+              placeholder="每行一条下周计划"
+            />
+          ) : content.nextWeekPlan.length > 0 ? (
             <ul className="space-y-2">
-              {report.content.nextWeekPlan.map((plan, index) => (
+              {content.nextWeekPlan.map((plan, index) => (
                 <li key={index} className="flex items-start gap-2 text-sm">
                   <span className="text-primary mt-0.5">{index + 1}.</span>
                   <span>{plan}</span>
@@ -233,20 +316,29 @@ export function ReportViewer({
       </Card>
 
       {/* 需要协调的事项 */}
-      {report.content.supportNeeds.length > 0 && (
+      {(isEditing || content.supportNeeds.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">需要协调的事项</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
-              {report.content.supportNeeds.map((need, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm">
-                  <span className="text-muted-foreground mt-0.5">•</span>
-                  <span>{need}</span>
-                </li>
-              ))}
-            </ul>
+            {isEditing ? (
+              <Textarea
+                value={toTextareaValue(content.supportNeeds)}
+                onChange={(event) => updateContent({ supportNeeds: parseLines(event.target.value) })}
+                className="min-h-28 text-sm"
+                placeholder="每行一条需要协调的事项"
+              />
+            ) : (
+              <ul className="space-y-2">
+                {content.supportNeeds.map((need, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm">
+                    <span className="text-muted-foreground mt-0.5">•</span>
+                    <span>{need}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       )}
@@ -303,6 +395,17 @@ function formatDateTime(dateStr: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function parseLines(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function toTextareaValue(items: string[]): string {
+  return items.join('\n');
 }
 
 export default ReportViewer;

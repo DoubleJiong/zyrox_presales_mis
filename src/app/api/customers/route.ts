@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { customers, customerTypes, users, projects } from '@/db/schema';
-import { desc, eq, sql, count, and, or, isNull, lt } from 'drizzle-orm';
+import { asc, desc, eq, sql, count, and, or, isNull, lt } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse, validatePagination } from '@/lib/api-response';
 import { formatDateField } from '@/lib/utils';
@@ -10,10 +10,35 @@ import { hasFullAccess } from '@/lib/permissions/middleware';
 import { DataScope, type ResourceType } from '@/lib/permissions/types';
 import { sanitizeString, containsHtml, isValidEmail, isValidPhone, sanitizeSearchString } from '@/lib/xss';
 import { mapCustomerTypeCodeToDictValue, resolveCustomerTypeId } from '@/lib/customer-types';
+import { buildCustomerNameLookupKeywords, matchCustomerName } from '@/lib/customer-name-dedup';
 
 // 辅助函数：生成客户编号
 function generateCustomerId(id: number): string {
   return `CUST${String(id).padStart(3, '0')}`;
+}
+
+type CustomerSortField = 'updatedAt' | 'lastInteractionTime' | 'totalAmount' | 'maxProjectAmount';
+type CustomerSortDirection = 'asc' | 'desc';
+
+function resolveCustomerOrderBy(
+  sortField: string,
+  sortDirection: string,
+) {
+  const direction: CustomerSortDirection = sortDirection === 'asc' ? 'asc' : 'desc';
+  const field = sortField as CustomerSortField;
+
+  switch (field) {
+    case 'lastInteractionTime':
+      return direction === 'asc' ? asc(customers.lastInteractionTime) : desc(customers.lastInteractionTime);
+    case 'totalAmount':
+      return direction === 'asc' ? asc(customers.totalAmount) : desc(customers.totalAmount);
+    case 'maxProjectAmount':
+      return direction === 'asc' ? asc(customers.maxProjectAmount) : desc(customers.maxProjectAmount);
+    case 'updatedAt':
+      return direction === 'asc' ? asc(customers.updatedAt) : desc(customers.updatedAt);
+    default:
+      return desc(customers.id);
+  }
 }
 
 // GET - 获取客户列表
@@ -29,6 +54,11 @@ export const GET = withAuth(async (
     const region = searchParams.get('region') || '';
     const customerTypeId = searchParams.get('customerTypeId') || '';
     const customerType = searchParams.get('customerType') || ''; // 支持通过类型名称筛选
+    const similarTo = sanitizeSearchString(searchParams.get('similarTo') || '');
+    const excludeId = searchParams.get('excludeId') || '';
+    const similarLimit = Math.min(Math.max(parseInt(searchParams.get('similarLimit') || '5', 10) || 5, 1), 10);
+    const sortField = searchParams.get('sortField') || 'updatedAt';
+    const sortDirection = searchParams.get('sortDirection') || 'desc';
     const userId = context.userId;
 
     // ============ 分页性能优化 ============
@@ -100,6 +130,73 @@ export const GET = withAuth(async (
       }
     }
 
+    if (similarTo) {
+      const keywords = buildCustomerNameLookupKeywords(similarTo);
+      if (!keywords.length) {
+        return successResponse({ customers: [] });
+      }
+
+      const parsedExcludeId = excludeId ? parseInt(excludeId, 10) : null;
+      if (excludeId && Number.isNaN(parsedExcludeId)) {
+        return errorResponse('BAD_REQUEST', '排除客户ID格式无效');
+      }
+
+      const similarConditions = [...conditions];
+      if (parsedExcludeId) {
+        similarConditions.push(sql`${customers.id} <> ${parsedExcludeId}`);
+      }
+
+      similarConditions.push(
+        or(...keywords.map((keyword) => sql`${customers.customerName} ILIKE ${`%${keyword}%`}`))!,
+      );
+
+      const matchedCustomers = await db
+        .select({
+          id: customers.id,
+          customerId: customers.customerId,
+          customerName: customers.customerName,
+          customerTypeName: customerTypes.name,
+          customerTypeCode: customerTypes.code,
+          region: customers.region,
+          contactName: customers.contactName,
+          updatedAt: customers.updatedAt,
+        })
+        .from(customers)
+        .leftJoin(customerTypes, eq(customers.customerTypeId, customerTypes.id))
+        .leftJoin(users, eq(customers.createdBy, users.id))
+        .where(and(...similarConditions))
+        .orderBy(desc(customers.updatedAt), desc(customers.id))
+        .limit(Math.max(similarLimit * 4, 12));
+
+      const similarCustomers = matchedCustomers
+        .map((customer) => {
+          const match = matchCustomerName(similarTo, customer.customerName);
+          return {
+            id: customer.id,
+            customerId: customer.customerId,
+            customerName: customer.customerName,
+            customerType: customer.customerTypeName || '',
+            customerTypeCode: mapCustomerTypeCodeToDictValue(customer.customerTypeCode),
+            region: customer.region,
+            contactName: customer.contactName,
+            updatedAt: formatDateField(customer.updatedAt),
+            matchType: match.matchType,
+            matchScore: match.score,
+          };
+        })
+        .filter((customer) => customer.matchType !== 'none')
+        .sort((left, right) => {
+          if (left.matchType !== right.matchType) {
+            return left.matchType === 'exact' ? -1 : 1;
+          }
+
+          return right.matchScore - left.matchScore;
+        })
+        .slice(0, similarLimit);
+
+      return successResponse({ customers: similarCustomers });
+    }
+
     // ============ 游标分页：性能优化 ============
     // 游标分页比OFFSET分页性能更好，特别是大数据量时
     if (cursor) {
@@ -131,6 +228,7 @@ export const GET = withAuth(async (
           status: customers.status,
           totalAmount: customers.totalAmount,
           currentProjectCount: customers.currentProjectCount,
+          lastInteractionTime: customers.lastInteractionTime,
           lastCooperationDate: customers.lastCooperationDate,
           maxProjectAmount: customers.maxProjectAmount,
           contactName: customers.contactName,
@@ -147,7 +245,7 @@ export const GET = withAuth(async (
         .leftJoin(customerTypes, eq(customers.customerTypeId, customerTypes.id))
         .leftJoin(users, eq(customers.createdBy, users.id))
         .where(and(...conditions))
-        .orderBy(desc(customers.id)) // 使用ID排序比createdAt性能更好（有主键索引）
+        .orderBy(resolveCustomerOrderBy(sortField, sortDirection), desc(customers.id))
         .limit(cursor ? pageSize + 1 : pageSize)
         .offset(cursor ? 0 : (page - 1) * pageSize)
     ]);
@@ -175,6 +273,7 @@ export const GET = withAuth(async (
         ...customer,
         customerType: customer.customerTypeName || '',          // 显示名称（用于列表显示）
         customerTypeCode: dictCode,                              // 字典code（用于编辑下拉框）
+        lastInteractionTime: formatDateField(customer.lastInteractionTime),
         lastCooperationDate: formatDateField(customer.lastCooperationDate),
         createdAt: formatDateField(customer.createdAt),
         updatedAt: formatDateField(customer.updatedAt),

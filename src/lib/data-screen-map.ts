@@ -35,7 +35,7 @@ export function getCurrentMapData(currentMapType: DataScreenMapType, heatmapRegi
     return heatmapRegionData.length > 0 ? heatmapRegionData : getDefaultProvinceData();
   }
 
-  return getZhejiangMapData();
+  return heatmapRegionData.length > 0 ? mergeZhejiangRegionData(heatmapRegionData) : getZhejiangMapData();
 }
 
 export function getMapDataTypeByHeatmapMode(heatmapMode: DataScreenHeatmapMode): MapDataType {
@@ -69,4 +69,25 @@ function createEmptyRegionData(name: string): MapRegionData {
     budget: 0,
     contractAmount: 0,
   };
+}
+
+function normalizeRegionName(name: string) {
+  return name.replace(/省|市/g, '').trim();
+}
+
+function mergeZhejiangRegionData(regions: MapRegionData[]): MapRegionData[] {
+  const regionMap = new Map(regions.map((region) => [normalizeRegionName(region.name), region]));
+
+  return ZHEJIANG_CITIES.map((city) => {
+    const matchedRegion = regionMap.get(normalizeRegionName(city));
+    if (!matchedRegion) {
+      return createEmptyRegionData(city);
+    }
+
+    return {
+      ...createEmptyRegionData(city),
+      ...matchedRegion,
+      name: city,
+    };
+  });
 }

@@ -266,6 +266,7 @@ export default function SolutionDetailPage() {
   
   // 权限
   const [userPermission, setUserPermission] = useState<{
+    currentUserId?: number;
     isTeamMember: boolean;
     role: string | null;
     isOwner: boolean;
@@ -664,6 +665,12 @@ export default function SolutionDetailPage() {
   }
 
   const canEdit = userPermission?.permissions.canEdit;
+  const pendingReview = getPendingReview();
+  const canActOnPendingReview =
+    solution.status === 'reviewing' &&
+    !!pendingReview &&
+    !!userPermission?.permissions.canApprove &&
+    pendingReview.reviewerId === userPermission?.currentUserId;
 
   return (
     <div className="flex flex-col h-[calc(100vh-2rem)]" data-testid="solution-detail-page">
@@ -979,7 +986,7 @@ export default function SolutionDetailPage() {
                           <CardDescription>共 {reviews.length} 条记录</CardDescription>
                         </div>
                         <div className="flex items-center gap-2">
-                          {solution.status === 'reviewing' && userPermission?.permissions.canApprove && (
+                          {canActOnPendingReview && (
                             <>
                               <Button size="sm" variant="outline" onClick={() => setShowRevisionDialog(true)} data-testid="solution-review-request-revision-button">
                                 <AlertCircle className="h-4 w-4 mr-2" />

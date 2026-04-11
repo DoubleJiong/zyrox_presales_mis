@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
+import { PERMISSIONS } from '@/lib/permissions';
 
 // 省份列表
 const provinces = [
@@ -116,4 +117,6 @@ export const GET = withAuth(async (request: NextRequest) => {
     console.error('Data screen map API error:', error);
     return errorResponse('INTERNAL_ERROR', '获取地图数据失败');
   }
+}, {
+  requiredPermissions: [PERMISSIONS.DATASCREEN_VIEW],
 });

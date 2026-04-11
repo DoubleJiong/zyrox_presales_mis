@@ -100,6 +100,7 @@ export async function getApprovalRequestById(approvalRequestId: number) {
       status: approvalRequests.status,
       title: approvalRequests.title,
       currentStep: approvalRequests.currentStep,
+      initiatorId: approvalRequests.initiatorId,
     })
     .from(approvalRequests)
     .where(eq(approvalRequests.id, approvalRequestId))

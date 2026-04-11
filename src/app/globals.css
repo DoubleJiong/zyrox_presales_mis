@@ -135,6 +135,10 @@
   body {
     @apply bg-background text-foreground;
   }
+  html {
+    /* 防止弹窗打开时页面因滚动条消失而产生的布局抖动 */
+    scrollbar-gutter: stable;
+  }
 }
 
 body {

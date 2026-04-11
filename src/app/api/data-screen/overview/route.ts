@@ -4,6 +4,7 @@ import { customers, projectBiddings, projectOpportunities, projects, solutions, 
 import { count, desc, eq, isNull, sql } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { withAuth } from '@/lib/auth-middleware';
+import { PERMISSIONS } from '@/lib/permissions';
 import { aggregateProjectLifecycleRows } from '@/lib/project-reporting';
 
 const overviewCache = new Map<string, { data: any; timestamp: number }>();
@@ -99,9 +100,9 @@ function parseDateParam(value: string | null) {
   return startOfDay(parsed);
 }
 
-function resolveDateRange(request: NextRequest): DateRange {
-  const endDate = parseDateParam(request.nextUrl.searchParams.get('endDate')) ?? startOfToday();
-  const requestedStartDate = parseDateParam(request.nextUrl.searchParams.get('startDate'));
+function resolveOverviewDateRange(searchParams: URLSearchParams): DateRange {
+  const endDate = parseDateParam(searchParams.get('endDate')) ?? startOfToday();
+  const requestedStartDate = parseDateParam(searchParams.get('startDate'));
   const fallbackStartDate = new Date(endDate);
   fallbackStartDate.setDate(fallbackStartDate.getDate() - 29);
 
@@ -395,19 +396,18 @@ function buildForecastSummary(rows: OpportunitySummaryRow[], currentWonAmount: n
   };
 }
 
-export const GET = withAuth(async (request: NextRequest) => {
-  try {
-    const now = Date.now();
-    const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true';
-    const range = resolveDateRange(request);
+async function getOverviewPayload(searchParams: URLSearchParams) {
+  const now = Date.now();
+  const forceRefresh = searchParams.get('refresh') === 'true';
+  const range = resolveOverviewDateRange(searchParams);
     const cacheKey = buildOverviewCacheKey(range);
     const cachedOverview = overviewCache.get(cacheKey);
     const currentPeriodStart = toSqlTimestamp(range.startDate);
     const currentPeriodEnd = toSqlTimestamp(range.endDateExclusive);
     const rolling90Start = toSqlTimestamp(new Date(range.endDateExclusive.getTime() - 90 * 24 * 60 * 60 * 1000));
 
-    if (!forceRefresh && cachedOverview && (now - cachedOverview.timestamp) < CACHE_TTL) {
-      return successResponse(cachedOverview.data);
+  if (!forceRefresh && cachedOverview && (now - cachedOverview.timestamp) < CACHE_TTL) {
+    return cachedOverview.data;
     }
 
     const [
@@ -597,14 +597,21 @@ export const GET = withAuth(async (request: NextRequest) => {
       topRevenueRegions: [...regionStats].sort((a, b) => b.amount - a.amount).slice(0, 5),
     };
 
-    overviewCache.set(cacheKey, {
-      data: responseData,
-      timestamp: now,
-    });
+  overviewCache.set(cacheKey, {
+    data: responseData,
+    timestamp: now,
+  });
 
-    return successResponse(responseData);
+  return responseData;
+}
+
+export const GET = withAuth(async (request: NextRequest) => {
+  try {
+    return successResponse(await getOverviewPayload(request.nextUrl.searchParams));
   } catch (error) {
     console.error('Data screen overview API error:', error);
     return errorResponse('INTERNAL_ERROR', '获取数据大屏概览数据失败');
   }
+}, {
+  requiredPermissions: [PERMISSIONS.DATASCREEN_VIEW],
 });

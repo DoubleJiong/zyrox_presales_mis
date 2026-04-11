@@ -63,6 +63,7 @@ interface BiddingProject {
   createdAt: string;
   updatedAt: string;
   biddingId: number | null;
+  biddingMethod: string | null;
   biddingType: string | null;
   bidDeadline: string | null;
   bidBondAmount: string | null;
@@ -84,13 +85,24 @@ const bidResultMap: Record<string, { label: string; color: string }> = {
   lost: { label: '落标', color: 'bg-red-100 text-red-700' },
 };
 
-// 投标类型映射
-const biddingTypeMap: Record<string, string> = {
+// 招标方式映射（兼容 biddingMethod V1.3 和旧 biddingType）
+const biddingMethodMap: Record<string, string> = {
+  // V1.3 招标方式（biddingMethod）
+  open: '公开招标',
+  invite: '邀请招标',
+  competitive: '竞争性谈判',
+  consultation: '竞争性磋商',
+  inquiry: '询价',
+  centralized: '集采',
+  single: '单一来源',
+  // 旧字段（biddingType）兼容
   public: '公开招标',
   private: '邀请招标',
   negotiation: '竞争性谈判',
-  single: '单一来源',
 };
+
+// @deprecated - 保留名称兼容旧引用
+const biddingTypeMap = biddingMethodMap;
 
 // 保证金状态映射
 const bondStatusMap: Record<string, { label: string; color: string }> = {
@@ -273,7 +285,7 @@ export default function BiddingManagementPage() {
                     <TableRow>
                       <TableHead>项目名称</TableHead>
                       <TableHead>客户名称</TableHead>
-                      <TableHead>投标类型</TableHead>
+                      <TableHead>招标方式</TableHead>
                       <TableHead>投标金额</TableHead>
                       <TableHead>投标截止</TableHead>
                       <TableHead>保证金状态</TableHead>
@@ -294,9 +306,10 @@ export default function BiddingManagementPage() {
                           <span className="truncate block" title={bidding.customerName || ''}>{bidding.customerName || '-'}</span>
                         </TableCell>
                         <TableCell>
-                          {bidding.biddingType 
-                            ? biddingTypeMap[bidding.biddingType] || bidding.biddingType 
-                            : '-'}
+                          {(() => {
+                            const val = bidding.biddingMethod || bidding.biddingType;
+                            return val ? biddingMethodMap[val] || val : '-';
+                          })()}
                         </TableCell>
                         <TableCell>
                           {formatAmount(bidding.bidPrice || bidding.estimatedAmount)}
@@ -390,11 +403,12 @@ export default function BiddingManagementPage() {
                   <div className="font-medium">{selectedProject.customerName || '-'}</div>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">投标类型</Label>
+                  <Label className="text-muted-foreground">招标方式</Label>
                   <div className="font-medium">
-                    {selectedProject.biddingType 
-                      ? biddingTypeMap[selectedProject.biddingType] || selectedProject.biddingType 
-                      : '-'}
+                    {(() => {
+                      const val = selectedProject.biddingMethod || selectedProject.biddingType;
+                      return val ? biddingMethodMap[val] || val : '-';
+                    })()}
                   </div>
                 </div>
                 <div>

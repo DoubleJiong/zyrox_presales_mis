@@ -108,6 +108,10 @@ export async function approveBiddingInitiationApproval(input: {
     throw new ApprovalServiceError('BAD_REQUEST', '当前审批单不可执行审批通过', 400);
   }
 
+  if (approvalRequest.initiatorId === input.operatorId) {
+    throw new ApprovalServiceError('FORBIDDEN', '不能审批自己发起的审批单', 403);
+  }
+
   await updateApprovalRequestStatus(input.approvalRequestId, 'approved', {
     completedAt: new Date(),
     currentStep: 1,

@@ -162,12 +162,18 @@ export async function getUserPermissions(userId: number): Promise<UserWithPermis
     roleCode = allRoles[0].roleCode;
 
     for (const role of allRoles) {
+      const normalizedRoleCode = role.roleCode?.toUpperCase() || null;
+
       if (role.permissions && role.permissions.length > 0) {
         permissions = [...permissions, ...role.permissions];
       }
 
-      // 检查是否是超级管理员
-      if (role.roleCode === SYSTEM_ROLES.SUPER_ADMIN.code) {
+      // 统一 ADMIN / SUPER_ADMIN / * 三种超级管理员口径，避免前后端判定不一致。
+      if (
+        normalizedRoleCode === 'ADMIN' ||
+        normalizedRoleCode === 'SUPER_ADMIN' ||
+        (role.permissions || []).includes('*' as Permission)
+      ) {
         isSuperAdmin = true;
       }
     }
@@ -235,7 +241,10 @@ export function hasPermission(
   // 标准格式：customer:view
   const [module, action] = permission.split(':');
 
-  const moduleVariants = [module];
+  const moduleVariants = Array.from(new Set([
+    module,
+    ...(module === 'solution' ? ['scheme'] : []),
+  ]));
 
   // 检查各种可能的权限格式变体
   const permissionVariants = Array.from(new Set(moduleVariants.flatMap((variantModule) => [
@@ -295,11 +304,56 @@ export function getRequiredPermissions(
   method: string,
   path: string
 ): Permission[] | null {
-  // 规范化路径
-  const normalizedPath = path.replace(/\/\d+/g, ''); // 移除ID参数
-  const key = `${method.toUpperCase()}:${normalizedPath}`;
+  const normalizedMethod = method.toUpperCase();
+  const normalizedPath = normalizePermissionPath(path);
+  const exactKey = `${normalizedMethod}:${normalizedPath}`;
 
-  return API_PERMISSIONS[key] || null;
+  if (API_PERMISSIONS[exactKey]) {
+    return API_PERMISSIONS[exactKey];
+  }
+
+  for (const [routeKey, permissions] of Object.entries(API_PERMISSIONS)) {
+    const separatorIndex = routeKey.indexOf(':');
+    const routeMethod = routeKey.slice(0, separatorIndex);
+    const routePath = routeKey.slice(separatorIndex + 1);
+
+    if (routeMethod !== normalizedMethod) {
+      continue;
+    }
+
+    if (matchPermissionPath(normalizedPath, routePath)) {
+      return permissions;
+    }
+  }
+
+  return null;
+}
+
+function normalizePermissionPath(path: string): string {
+  const [pathname] = path.split('?');
+  if (!pathname) {
+    return '/';
+  }
+
+  const normalized = pathname.replace(/\/+$/, '');
+  return normalized || '/';
+}
+
+function matchPermissionPath(actualPath: string, routePath: string): boolean {
+  const actualSegments = normalizePermissionPath(actualPath).split('/').filter(Boolean);
+  const routeSegments = normalizePermissionPath(routePath).split('/').filter(Boolean);
+
+  if (actualSegments.length !== routeSegments.length) {
+    return false;
+  }
+
+  return routeSegments.every((segment, index) => {
+    if (segment.startsWith('[') && segment.endsWith(']')) {
+      return actualSegments[index].length > 0;
+    }
+
+    return segment === actualSegments[index];
+  });
 }
 
 /**

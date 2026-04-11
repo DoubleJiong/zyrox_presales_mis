@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { projects, users, tasks, projectBudgetHistory, projectBiddings } from '@/db/schema';
-import { eq, sql, and, isNull } from 'drizzle-orm';
+import { eq, sql, and, isNull, or } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { canReadProject, canWriteProject, canAdminProject } from '@/lib/permissions/project';
@@ -11,6 +11,7 @@ import { sanitizeString, containsHtml } from '@/lib/xss';
 import { resolveProjectCustomerSnapshot } from '@/lib/project-customer-snapshot';
 import { formatDateField } from '@/lib/utils';
 import { isGovernedProjectStage } from '@/modules/project/project-stage-policy';
+import { normalizeProjectTypeCode, normalizeProjectTypeCodes, serializeProjectTypeCodes } from '@/lib/project-type-codec';
 
 // GET - 获取项目详情
 export const GET = withAuth(async (
@@ -43,6 +44,7 @@ export const GET = withAuth(async (
         customerId: projects.customerId,
         customerName: projects.customerName,
         projectTypeId: projects.projectTypeId,
+        projectType: projects.projectType,
         industry: projects.industry,
         region: projects.region,
         description: projects.description,
@@ -87,6 +89,7 @@ export const GET = withAuth(async (
     const project = projectList[0];
     const formattedProject = {
       ...project,
+      projectTypes: normalizeProjectTypeCodes(project.projectType),
       startDate: formatDateField(project.startDate),
       endDate: formatDateField(project.endDate),
       expectedDeliveryDate: formatDateField(project.expectedDeliveryDate),
@@ -199,6 +202,8 @@ export const PUT = withAuth(async (
       ...body,
       projectName: body.projectName !== undefined ? sanitizeString(body.projectName) : undefined,
       customerName: body.customerName !== undefined ? sanitizeString(body.customerName) : undefined,
+      projectType: body.projectType !== undefined ? sanitizeString(String(body.projectType)) : undefined,
+      projectTypes: body.projectTypes !== undefined ? normalizeProjectTypeCodes(body.projectTypes) : undefined,
       description: body.description !== undefined ? (body.description ? sanitizeString(body.description) : null) : undefined,
       risks: body.risks !== undefined ? (body.risks ? sanitizeString(body.risks) : null) : undefined,
       loseReason: body.loseReason !== undefined ? (body.loseReason ? sanitizeString(body.loseReason) : null) : undefined,
@@ -280,18 +285,67 @@ export const PUT = withAuth(async (
 
     const newCustomerId = customerSnapshot.customerId;
 
-    // 同步 projectType 字段（当 projectTypeId 变化时）
-    let newProjectType = originalProject.projectType;
-    if (sanitizedBody.projectTypeId !== undefined && sanitizedBody.projectTypeId !== originalProject.projectTypeId) {
+    let resolvedProjectTypeId = originalProject.projectTypeId;
+    let resolvedProjectTypeCode = originalProject.projectType;
+
+    if (sanitizedBody.projectTypeId !== undefined || sanitizedBody.projectType !== undefined || sanitizedBody.projectTypes !== undefined) {
       const { projectTypes } = await import('@/db/schema');
-      const [newType] = await db
-        .select({ code: projectTypes.code })
+      const activeProjectTypes = await db
+        .select({ id: projectTypes.id, code: projectTypes.code, name: projectTypes.name })
         .from(projectTypes)
-        .where(eq(projectTypes.id, sanitizedBody.projectTypeId))
-        .limit(1);
-      if (newType) {
-        newProjectType = newType.code;
+        .where(isNull(projectTypes.deletedAt));
+
+      const requestedProjectTypeCodes = normalizeProjectTypeCodes(sanitizedBody.projectTypes ?? sanitizedBody.projectType);
+      const resolvedCodes: string[] = [];
+
+      if ((sanitizedBody.projectType !== undefined || sanitizedBody.projectTypes !== undefined) && sanitizedBody.projectTypeId === undefined) {
+        resolvedProjectTypeId = undefined;
       }
+
+      if (sanitizedBody.projectTypeId !== undefined && sanitizedBody.projectTypeId !== null && sanitizedBody.projectTypeId !== '') {
+        const typeById = activeProjectTypes.find((item) => item.id === Number(sanitizedBody.projectTypeId));
+
+        if (!typeById) {
+          return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
+        }
+
+        resolvedProjectTypeId = typeById.id;
+        resolvedProjectTypeCode = typeById.code;
+        if (requestedProjectTypeCodes.length === 0) {
+          resolvedCodes.push(typeById.code);
+        }
+      }
+
+      requestedProjectTypeCodes.forEach((requestedCode) => {
+        const normalizedRequestedCode = normalizeProjectTypeCode(requestedCode);
+        const matchedType = activeProjectTypes.find((item) => {
+          const normalizedCode = normalizeProjectTypeCode(item.code);
+          const normalizedName = normalizeProjectTypeCode(item.name);
+          return normalizedCode === normalizedRequestedCode
+            || normalizedName === normalizedRequestedCode
+            || `${normalizedName}项目` === normalizedRequestedCode;
+        });
+
+        if (!matchedType) {
+          throw new Error(`PROJECT_TYPE_NOT_FOUND:${requestedCode}`);
+        }
+
+        if (!resolvedProjectTypeId) {
+          resolvedProjectTypeId = matchedType.id;
+        }
+
+        if (!resolvedCodes.includes(matchedType.code)) {
+          resolvedCodes.push(matchedType.code);
+        }
+      });
+
+      if (!resolvedProjectTypeId) {
+        return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
+      }
+
+      resolvedProjectTypeCode = serializeProjectTypeCodes(
+        resolvedCodes.length > 0 ? resolvedCodes : normalizeProjectTypeCodes(originalProject.projectType)
+      );
     }
 
     // BUG-003: 检查预算是否有变化，用于记录历史
@@ -305,8 +359,8 @@ export const PUT = withAuth(async (
       projectName: sanitizedBody.projectName !== undefined ? sanitizedBody.projectName : undefined,
       customerId: sanitizedBody.customerId !== undefined || sanitizedBody.customerName !== undefined ? newCustomerId : undefined,
       customerName: sanitizedBody.customerId !== undefined || sanitizedBody.customerName !== undefined ? customerSnapshot.customerName : undefined,
-      projectTypeId: sanitizedBody.projectTypeId !== undefined ? sanitizedBody.projectTypeId : undefined,
-      projectType: sanitizedBody.projectTypeId !== undefined ? newProjectType : undefined,
+      projectTypeId: sanitizedBody.projectTypeId !== undefined || sanitizedBody.projectType !== undefined || sanitizedBody.projectTypes !== undefined ? resolvedProjectTypeId : undefined,
+      projectType: sanitizedBody.projectTypeId !== undefined || sanitizedBody.projectType !== undefined || sanitizedBody.projectTypes !== undefined ? resolvedProjectTypeCode : undefined,
       industry: sanitizedBody.industry !== undefined ? sanitizedBody.industry : undefined,
       region: sanitizedBody.region !== undefined ? sanitizedBody.region : undefined,
       description: sanitizedBody.description !== undefined ? sanitizedBody.description : undefined,

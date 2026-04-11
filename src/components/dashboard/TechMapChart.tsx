@@ -23,6 +23,8 @@ interface TechMapChartProps {
   highlightMode?: MapHighlightMode | null; // 新增高亮模式
   highlightRegions?: string[]; // 需要高亮的区域名称列表
   regionBrightness?: Record<string, number>; // 各区域的亮度值
+  showViewportToolbar?: boolean;
+  onRequestExpand?: () => void;
 }
 
 export function TechMapChart({
@@ -40,10 +42,14 @@ export function TechMapChart({
   highlightMode = null,
   highlightRegions = [],
   regionBrightness = {},
+  showViewportToolbar = false,
+  onRequestExpand,
 }: TechMapChartProps) {
   const chartRef = useRef<ReactECharts>(null);
   const [geoJson, setGeoJson] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [mapRenderVersion, setMapRenderVersion] = useState(0);
 
   // 获取当前数据类型的值
   const getCurrentValue = (item: MapRegionData) => {
@@ -180,6 +186,52 @@ export function TechMapChart({
   const config = getCurrentConfig();
   const maxValue = Math.max(...data.map((d) => getCurrentValue(d)), 10);
 
+  const getGeoLayout = () => {
+    if (mapType === 'china') {
+      return {
+        layoutCenter: ['50%', '60%'] as [string, string],
+        layoutSize: '150%',
+        zoom: 1,
+      };
+    }
+
+    return {
+      layoutCenter: ['50%', '58%'] as [string, string],
+      layoutSize: '170%',
+      zoom: 1,
+    };
+  };
+
+  const syncZoomLevel = () => {
+    const chart = chartRef.current?.getEchartsInstance();
+    const option = chart?.getOption() as { geo?: Array<{ zoom?: number }> } | undefined;
+    const nextZoom = option?.geo?.[0]?.zoom;
+
+    if (typeof nextZoom === 'number' && Number.isFinite(nextZoom)) {
+      setZoomLevel(Number(nextZoom.toFixed(2)));
+    }
+  };
+
+  const applyZoomLevel = (nextZoom: number) => {
+    const chart = chartRef.current?.getEchartsInstance();
+    if (!chart) {
+      return;
+    }
+
+    const safeZoom = Number(Math.max(0.8, Math.min(8, nextZoom)).toFixed(2));
+    chart.setOption({
+      geo: {
+        zoom: safeZoom,
+      },
+    });
+    setZoomLevel(safeZoom);
+  };
+
+  const resetViewport = () => {
+    setZoomLevel(1);
+    setMapRenderVersion((current) => current + 1);
+  };
+
   // 加载地图数据
   useEffect(() => {
     const loadMapData = async () => {
@@ -207,6 +259,7 @@ export function TechMapChart({
         console.log(`Map registered: ${mapType}`);
 
         setLoading(false);
+        setZoomLevel(1);
       } catch (error) {
         console.error('Failed to load map data:', error);
         setLoading(false);
@@ -436,6 +489,8 @@ export function TechMapChart({
       };
     });
 
+    const geoLayout = getGeoLayout();
+
     return {
       backgroundColor: 'transparent',
       // 性能优化配置
@@ -636,8 +691,10 @@ export function TechMapChart({
       }] : []),
       geo: {
         map: mapType,
-        roam: false,
-        zoom: 1.2,
+        roam: true,
+        zoom: geoLayout.zoom,
+        layoutCenter: geoLayout.layoutCenter,
+        layoutSize: geoLayout.layoutSize,
         label: {
           show: true,
           color: techTheme.text.primary,
@@ -797,6 +854,9 @@ export function TechMapChart({
         }
       }
     },
+    georoam: () => {
+      syncZoomLevel();
+    },
   };
 
   if (loading) {
@@ -839,12 +899,93 @@ export function TechMapChart({
         display: 'flex',
         gap: '16px',
         height: '100%',
+        position: 'relative',
+        isolation: 'isolate',
+        zIndex: 2,
       }}
     >
+      {showViewportToolbar ? (
+        <div
+          style={{
+            position: 'absolute',
+            top: '14px',
+            right: '14px',
+            zIndex: 60,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            alignItems: 'flex-end',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              gap: '8px',
+              padding: '8px',
+              borderRadius: '14px',
+              background: 'rgba(5, 12, 24, 0.76)',
+              border: '1px solid rgba(0, 212, 255, 0.2)',
+              backdropFilter: 'blur(10px)',
+              pointerEvents: 'auto',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => applyZoomLevel(zoomLevel + 0.2)}
+              title="放大地图"
+              style={toolbarButtonStyle}
+            >
+              放大
+            </button>
+            <button
+              type="button"
+              onClick={() => applyZoomLevel(zoomLevel - 0.2)}
+              title="缩小地图"
+              style={toolbarButtonStyle}
+            >
+              缩小
+            </button>
+            <button
+              type="button"
+              onClick={resetViewport}
+              title="还原地图视角"
+              style={toolbarButtonStyle}
+            >
+              还原
+            </button>
+            {onRequestExpand ? (
+              <button
+                type="button"
+                onClick={onRequestExpand}
+                title="放大查看地图"
+                style={toolbarButtonStyle}
+              >
+                详细查看
+              </button>
+            ) : null}
+          </div>
+
+          <div
+            style={{
+              padding: '6px 10px',
+              borderRadius: '999px',
+              background: 'rgba(5, 12, 24, 0.72)',
+              border: '1px solid rgba(0, 212, 255, 0.16)',
+              color: 'rgba(232,246,255,0.72)',
+              fontSize: '11px',
+              pointerEvents: 'none',
+            }}
+          >
+            滚轮缩放 拖动平移 当前 {zoomLevel.toFixed(1)}x
+          </div>
+        </div>
+      ) : null}
+
       {/* 地图容器 */}
       <div style={{ flex: 1, height }}>
         <ReactECharts
-          key={mapType} // 使用key强制重新创建组件
+          key={`${mapType}-${mapRenderVersion}`} // 使用key强制重新创建组件
           ref={chartRef}
           option={getOption()}
           style={{ height, width: '100%' }}
@@ -1125,3 +1266,14 @@ export function TechMapChart({
     </div>
   );
 }
+
+const toolbarButtonStyle: React.CSSProperties = {
+  border: '1px solid rgba(255,255,255,0.14)',
+  background: 'rgba(255,255,255,0.04)',
+  color: '#E8F6FF',
+  borderRadius: '10px',
+  padding: '7px 10px',
+  fontSize: '11px',
+  cursor: 'pointer',
+  minWidth: '64px',
+};

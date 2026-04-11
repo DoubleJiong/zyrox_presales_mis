@@ -38,6 +38,7 @@ export interface CreateReviewParams {
 
 export interface SubmitReviewParams {
   reviewId: number;
+  operatorId: number;
   reviewStatus: 'approved' | 'rejected' | 'revision_required';
   reviewComment?: string;
   reviewScore?: number;

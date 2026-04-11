@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { hasPermission, type UserWithPermissions } from '../../../src/lib/rbac';
+import { getRequiredPermissions, hasPermission, type UserWithPermissions } from '../../../src/lib/rbac';
+import { PERMISSIONS } from '../../../src/lib/permissions';
 
 function createUser(permissions: string[]): UserWithPermissions {
   return {
@@ -27,5 +28,14 @@ describe('hasPermission', () => {
 
     expect(hasPermission(user, 'solution:view')).toBe(true);
     expect(hasPermission(user, 'solution:create')).toBe(true);
+  });
+
+  it('matches bracketed API permission routes against concrete ids', () => {
+    expect(getRequiredPermissions('GET', '/api/projects/123/members')).toEqual([PERMISSIONS.PROJECT_VIEW]);
+  });
+
+  it('returns the canonical data-screen permissions for phase-2 and team-execution APIs', () => {
+    expect(getRequiredPermissions('GET', '/api/data-screen/panels')).toEqual([PERMISSIONS.DATASCREEN_VIEW]);
+    expect(getRequiredPermissions('GET', '/api/data-screen/team-execution/detail')).toEqual([PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW]);
   });
 });

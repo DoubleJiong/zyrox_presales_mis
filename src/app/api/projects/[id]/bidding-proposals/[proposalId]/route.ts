@@ -21,6 +21,19 @@ function isValidProgress(progress: number | undefined | null): boolean {
   return typeof progress === 'number' && progress >= 0 && progress <= 100;
 }
 
+function normalizeProposalProgress(status: string | undefined | null, progress: unknown) {
+  if (status === 'completed') {
+    return 100;
+  }
+
+  const numericProgress = Number(progress);
+  if (Number.isNaN(numericProgress)) {
+    return 0;
+  }
+
+  return Math.min(100, Math.max(0, numericProgress));
+}
+
 // PUT - 更新投标方案
 export const PUT = withAuth(async (
   request: NextRequest,
@@ -49,7 +62,10 @@ export const PUT = withAuth(async (
     }
     
     // BUG-BID003: 验证进度范围
-    if (!isValidProgress(body.progress)) {
+    const normalizedStatus = body.status || 'draft';
+    const normalizedProgress = normalizeProposalProgress(normalizedStatus, body.progress);
+
+    if (!isValidProgress(normalizedProgress)) {
       return errorResponse('BAD_REQUEST', '进度必须在 0-100 之间');
     }
     
@@ -58,8 +74,8 @@ export const PUT = withAuth(async (
       .set({
         name: body.name,
         type: body.type || null,
-        status: body.status || 'draft',
-        progress: body.progress || 0,
+        status: normalizedStatus,
+        progress: normalizedProgress,
         deadline: body.deadline || null,
         notes: body.notes || null,
         updatedAt: new Date(),

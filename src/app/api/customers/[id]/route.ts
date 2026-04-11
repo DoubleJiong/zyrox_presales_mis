@@ -41,6 +41,7 @@ export const GET = withAuth(async (
         status: customers.status,
         totalAmount: customers.totalAmount,
         currentProjectCount: customers.currentProjectCount,
+        lastInteractionTime: customers.lastInteractionTime,
         lastCooperationDate: customers.lastCooperationDate,
         maxProjectAmount: customers.maxProjectAmount,
         contactName: customers.contactName,
@@ -86,6 +87,7 @@ export const GET = withAuth(async (
       customerType: customer.customerTypeName, // 添加 customerType 别名，用于前端兼容（显示名称）
       customerTypeCode: dictCode,               // 字典code（用于编辑下拉框）
       // 格式化日期字段
+      lastInteractionTime: formatDateField(customer.lastInteractionTime),
       lastCooperationDate: formatDateField(customer.lastCooperationDate),
       createdAt: formatDateField(customer.createdAt),
       updatedAt: formatDateField(customer.updatedAt),

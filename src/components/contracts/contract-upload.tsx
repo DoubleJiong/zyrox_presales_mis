@@ -23,6 +23,13 @@ const CHUNK_UPLOAD_THRESHOLD = 10 * 1024 * 1024;
 
 interface ContractUploadProps {
   onAnalyzeComplete: (data: ContractAnalyzeResult) => void;
+  onUploadComplete?: (file: {
+    fileKey: string;
+    fileName: string;
+    fileType: string;
+    fileSize: number;
+    signedUrl: string;
+  }) => void;
 }
 
 interface MissingField {
@@ -48,7 +55,7 @@ interface ContractAnalyzeResult {
 
 type UploadStatus = 'idle' | 'uploading' | 'analyzing' | 'success' | 'partial' | 'error';
 
-export function ContractUpload({ onAnalyzeComplete }: ContractUploadProps) {
+export function ContractUpload({ onAnalyzeComplete, onUploadComplete }: ContractUploadProps) {
   const { toast } = useToast();
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -188,6 +195,14 @@ export function ContractUpload({ onAnalyzeComplete }: ContractUploadProps) {
       }
 
       setUploadProgress(60);
+
+      onUploadComplete?.({
+        fileKey: uploadResult.data.fileKey,
+        fileName: uploadResult.data.fileName,
+        fileType: uploadResult.data.fileType,
+        fileSize: uploadResult.data.fileSize,
+        signedUrl: uploadResult.data.signedUrl,
+      });
 
       // 检查是否可以进行AI分析
       console.log('[合同上传] 上传结果:', {

@@ -9,7 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { DictSelect } from '@/components/dictionary/dict-select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Select,
   SelectContent,
@@ -17,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, Loader2, Save, Sparkles } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2, Save, Sparkles, X } from 'lucide-react';
 import { ContractUpload } from '@/components/contracts/contract-upload';
 
 interface SignMode {
@@ -25,6 +27,19 @@ interface SignMode {
   modeCode: string;
   modeName: string;
   description: string;
+}
+
+interface CustomerOption {
+  id: number;
+  customerName: string;
+}
+
+interface UploadedContractFile {
+  name: string;
+  url: string;
+  fileKey: string;
+  fileType: string;
+  fileSize: number;
 }
 
 // AI分析结果类型
@@ -56,16 +71,19 @@ export default function NewContractPage() {
 
   const [loading, setLoading] = useState(false);
   const [signModes, setSignModes] = useState<SignMode[]>([]);
+  const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [aiExtracted, setAiExtracted] = useState(false); // 标记是否通过AI提取
   const [missingRequiredCount, setMissingRequiredCount] = useState(0);
+  const [uploadedContractFiles, setUploadedContractFiles] = useState<UploadedContractFile[]>([]);
 
   // 表单数据
   const [formData, setFormData] = useState({
     contractName: '',
-    signMode: '1',
+    signMode: '',
     signerUnit: '',
     userUnit: '',
     userUnitId: '',
+    customerId: '',
     projectId: '',
     department: '',
     contractAmount: '',
@@ -90,14 +108,84 @@ export default function NewContractPage() {
         const result = await response.json();
         if (result.success) {
           setSignModes(result.data);
+          setFormData((current) => {
+            if (current.signMode || !result.data?.length) {
+              return current;
+            }
+
+            return {
+              ...current,
+              signMode: result.data[0].modeCode,
+            };
+          });
         }
       } catch (error) {
         console.error('Failed to fetch sign modes:', error);
       }
     };
 
+    const fetchCustomerOptions = async () => {
+      try {
+        const response = await fetch('/api/customers?page=1&pageSize=200');
+        const result = await response.json();
+        if (result.success) {
+          const list = Array.isArray(result.data?.customers) ? result.data.customers : [];
+          setCustomerOptions(list.map((item: any) => ({
+            id: item.id,
+            customerName: item.customerName,
+          })));
+        }
+      } catch (error) {
+        console.error('Failed to fetch customers for contract form:', error);
+      }
+    };
+
     fetchSignModes();
+    fetchCustomerOptions();
   }, []);
+
+  const handleUnitCustomerSelect = (field: 'signerUnit' | 'userUnit', value: string) => {
+    const selectedCustomer = customerOptions.find((item) => item.id.toString() === value);
+
+    if (!selectedCustomer) {
+      return;
+    }
+
+    setFormData((current) => {
+      if (field === 'userUnit') {
+        return {
+          ...current,
+          userUnit: selectedCustomer.customerName,
+          userUnitId: value,
+          customerId: value,
+        };
+      }
+
+      return {
+        ...current,
+        signerUnit: selectedCustomer.customerName,
+      };
+    });
+  };
+
+  const handleContractUploadComplete = (file: {
+    fileKey: string;
+    fileName: string;
+    fileType: string;
+    fileSize: number;
+    signedUrl: string;
+  }) => {
+    setUploadedContractFiles((prev) => [
+      ...prev,
+      {
+        name: file.fileName,
+        url: file.signedUrl,
+        fileKey: file.fileKey,
+        fileType: file.fileType,
+        fileSize: file.fileSize,
+      },
+    ]);
+  };
 
   // AI分析完成后的回调 - 自动填充表单
   const handleAnalyzeComplete = (result: ContractAnalyzeResult) => {
@@ -157,9 +245,20 @@ export default function NewContractPage() {
           ...formData,
           projectId: formData.projectId ? parseInt(formData.projectId) : null,
           userUnitId: formData.userUnitId ? parseInt(formData.userUnitId) : null,
+          customerId: formData.customerId ? parseInt(formData.customerId) : null,
           contractAmount: formData.contractAmount,
           warrantyAmount: formData.warrantyAmount || null,
           warrantyYears: formData.warrantyYears ? parseInt(formData.warrantyYears) : null,
+          contractScanName: uploadedContractFiles[0]?.name || null,
+          attachments: uploadedContractFiles.length > 0
+            ? uploadedContractFiles.map((f) => ({
+                name: f.name,
+                url: f.url,
+                fileKey: f.fileKey,
+                fileType: f.fileType,
+                fileSize: f.fileSize,
+              }))
+            : null,
           createdBy: user?.id,
         }),
       });
@@ -216,7 +315,32 @@ export default function NewContractPage() {
       </div>
 
       {/* AI智能上传区域 */}
-      <ContractUpload onAnalyzeComplete={handleAnalyzeComplete} />
+      <ContractUpload onAnalyzeComplete={handleAnalyzeComplete} onUploadComplete={handleContractUploadComplete} />
+
+      {uploadedContractFiles.length > 0 && (
+        <Card>
+          <CardContent className="pt-6 space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <span className="font-medium">已上传 {uploadedContractFiles.length} 个附件</span>
+            </div>
+            {uploadedContractFiles.map((file, index) => (
+              <div key={file.fileKey} className="flex items-center justify-between gap-2 p-2 rounded-md border bg-muted/30">
+                <p className="text-sm text-muted-foreground truncate">{file.name}</p>
+                <button
+                  type="button"
+                  className="shrink-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => setUploadedContractFiles((prev) => prev.filter((_, i) => i !== index))}
+                  aria-label="移除附件"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">提交时将自动保存为合同附件</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 基本信息 */}
       <Card id="section-basic">
@@ -272,6 +396,29 @@ export default function NewContractPage() {
             {selectedSignMode && (
               <p className="text-sm text-muted-foreground">{selectedSignMode.description}</p>
             )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>签约单位快捷关联</Label>
+              <SearchableSelect
+                options={customerOptions.map((item) => ({ value: item.id.toString(), label: item.customerName }))}
+                value={customerOptions.find((item) => item.customerName === formData.signerUnit)?.id.toString()}
+                onValueChange={(value) => handleUnitCustomerSelect('signerUnit', value)}
+                placeholder="从客户列表选择签约单位"
+                emptyText="未找到客户"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>用户单位快捷关联</Label>
+              <SearchableSelect
+                options={customerOptions.map((item) => ({ value: item.id.toString(), label: item.customerName }))}
+                value={formData.customerId || formData.userUnitId}
+                onValueChange={(value) => handleUnitCustomerSelect('userUnit', value)}
+                placeholder="从客户列表选择用户单位"
+                emptyText="未找到客户"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

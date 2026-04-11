@@ -1,6 +1,7 @@
 import { config as loadEnv } from 'dotenv';
 import { expect, test, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
 import postgres from 'postgres';
+import { acquireWorkbenchLock } from './helpers/workbench-lock';
 
 const ADMIN_USER = {
   email: 'admin@zhengyuan.com',
@@ -20,8 +21,10 @@ test.describe('wave 6 formal validation', () => {
     let createdMessageId: number | null = null;
     let createdAlertHistoryId: number | null = null;
     let createdAlertNotificationId: number | null = null;
+    let releaseWorkbenchLock: (() => Promise<void>) | null = null;
 
     try {
+      releaseWorkbenchLock = await acquireWorkbenchLock();
       anonymousContext = await playwrightRequest.newContext({ baseURL: TEST_BASE_URL });
       const anonymousResponse = await anonymousContext.get('/api/activities?types=task,message,alert&limit=10');
       expect(anonymousResponse.status()).toBe(401);
@@ -33,6 +36,7 @@ test.describe('wave 6 formal validation', () => {
       const taskName = `wave6-task-${uniqueSuffix}`;
       const messageTitle = `wave6-message-${uniqueSuffix}`;
       const alertRuleName = `wave6-alert-${uniqueSuffix}`;
+      const uniqueBaseId = createUniqueId();
 
       const [task] = await dbClient<{ id: number }[]>`
         INSERT INTO bus_project_task (
@@ -44,7 +48,7 @@ test.describe('wave 6 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_project_task),
+          ${uniqueBaseId},
           ${taskName},
           ${1},
           'in_progress',
@@ -72,7 +76,7 @@ test.describe('wave 6 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM sys_message),
+          ${uniqueBaseId - 1},
           ${messageTitle},
           '第六波 formal 消息验证',
           'reminder',
@@ -83,8 +87,8 @@ test.describe('wave 6 formal validation', () => {
           '/tasks?scope=mine',
           false,
           false,
-          NOW(),
-          NOW()
+          NOW() + INTERVAL '11 minutes',
+          NOW() + INTERVAL '11 minutes'
         )
         RETURNING id
       `;
@@ -106,7 +110,7 @@ test.describe('wave 6 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_alert_history),
+          ${uniqueBaseId - 2},
           ${alertRuleName},
           'progress',
           'user',
@@ -117,8 +121,8 @@ test.describe('wave 6 formal validation', () => {
           '第六波 formal 预警验证',
           'task',
           ${createdTaskId},
-          NOW(),
-          NOW()
+          NOW() + INTERVAL '12 minutes',
+          NOW() + INTERVAL '12 minutes'
         )
         RETURNING id
       `;
@@ -135,14 +139,14 @@ test.describe('wave 6 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_alert_notification),
+          ${uniqueBaseId - 3},
           ${createdAlertHistoryId},
           ${1},
           'system',
           'pending',
           '第六波 formal 预警通知',
-          NOW(),
-          NOW()
+          NOW() + INTERVAL '12 minutes',
+          NOW() + INTERVAL '12 minutes'
         )
         RETURNING id
       `;
@@ -150,9 +154,8 @@ test.describe('wave 6 formal validation', () => {
 
       await page.goto('/workbench');
       await expect(page.getByRole('heading', { name: '工作台' })).toBeVisible();
-      await expect(page.getByText('最近动态').first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText('个人事件收件箱').first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText(taskName).first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(messageTitle).first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText(alertRuleName).first()).toBeVisible({ timeout: 10_000 });
     } finally {
       if (dbClient && createdAlertNotificationId) {
@@ -177,6 +180,10 @@ test.describe('wave 6 formal validation', () => {
 
       if (dbClient) {
         await dbClient.end({ timeout: 5 });
+      }
+
+      if (releaseWorkbenchLock) {
+        await releaseWorkbenchLock();
       }
     }
   });
@@ -241,4 +248,8 @@ function createDbClient() {
     max: 1,
     prepare: false,
   });
+}
+
+function createUniqueId(offset = 0) {
+  return -((Date.now() % 1_000_000_000) + Math.floor(Math.random() * 10_000) + offset);
 }

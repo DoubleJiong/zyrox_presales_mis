@@ -30,6 +30,8 @@ import {
   Star,
   AlertTriangle,
   Mail,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -277,6 +279,41 @@ export default function WorkbenchPage() {
   const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
   const [reportType, setReportType] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
   const [quickActionPendingKey, setQuickActionPendingKey] = useState<string | null>(null);
+  const [moduleTagsOpen, setModuleTagsOpen] = useState(true);
+  const workbenchModules = [
+    {
+      title: '日程管理',
+      description: '查看本周安排、共享日程和临近拜访。',
+      href: '/calendar',
+      icon: <Calendar className="h-5 w-5" />,
+      count: stats.pendingTodos,
+      countLabel: '待处理事项',
+    },
+    {
+      title: '任务中心',
+      description: '聚焦我的任务、优先级和执行推进。',
+      href: '/tasks?scope=mine',
+      icon: <Target className="h-5 w-5" />,
+      count: stats.myTasks,
+      countLabel: '我的任务',
+    },
+    {
+      title: '消息中心',
+      description: '收拢系统通知、提醒和业务消息。',
+      href: '/messages',
+      icon: <Mail className="h-5 w-5" />,
+      count: stats.unreadMessages,
+      countLabel: '未读消息',
+    },
+    {
+      title: '预警管理',
+      description: '跟踪待处理风险并进入预警处置。',
+      href: '/alerts/histories?status=pending',
+      icon: <AlertTriangle className="h-5 w-5" />,
+      count: stats.pendingAlerts,
+      countLabel: '待处理预警',
+    },
+  ];
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -384,7 +421,7 @@ export default function WorkbenchPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">工作台</h1>
-          <p className="text-muted-foreground">先处理高优先事项，再进入任务、日程、消息和项目</p>
+          <p className="text-muted-foreground">先从核心模块进入处理，再结合优先队列和收件箱推进工作</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" asChild>
@@ -409,7 +446,7 @@ export default function WorkbenchPage() {
       </div>
 
       {/* 驾驶舱指标 */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-5 md:gap-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-5 md:gap-4" data-testid="workbench-metric-grid">
         <Link href="/calendar" className="block">
           <Card className="md:col-span-1 cursor-pointer hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 md:px-6">
@@ -471,6 +508,52 @@ export default function WorkbenchPage() {
           </Card>
         </Link>
       </div>
+
+      <Card data-testid="workbench-module-tags-section">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">工作台标签</CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setModuleTagsOpen((prev) => !prev)}
+              aria-label={moduleTagsOpen ? '收起工作台标签' : '展开工作台标签'}
+            >
+              {moduleTagsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          </div>
+          {moduleTagsOpen && (
+            <p className="text-sm text-muted-foreground">将日程管理、任务中心、消息中心和预警管理收拢到指标卡下方，作为轻量入口使用。</p>
+          )}
+        </CardHeader>
+        {moduleTagsOpen && (
+        <CardContent>
+          <div className="flex flex-wrap gap-3">
+            {workbenchModules.map((module) => (
+              <Link
+                key={module.title}
+                href={module.href}
+                className="group flex min-w-[220px] flex-1 items-center gap-3 rounded-full border bg-background px-4 py-3 transition-colors hover:bg-accent/40 md:min-w-[240px]"
+                data-testid={`workbench-module-tag-${module.title}`}
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  {module.icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{module.title}</span>
+                    <ArrowRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">{module.description}</p>
+                </div>
+                <Badge variant="secondary" className="shrink-0 rounded-full">{module.countLabel} {module.count}</Badge>
+              </Link>
+            ))}
+          </div>
+        </CardContent>
+        )}
+      </Card>
 
       {/* 一键生成报告入口 */}
       <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">

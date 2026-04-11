@@ -18,7 +18,10 @@ export async function GET(
 
     const permission = await getUserSolutionPermission(user.id, solutionId);
     
-    return NextResponse.json(permission);
+    return NextResponse.json({
+      ...permission,
+      currentUserId: user.id,
+    });
   } catch (error) {
     console.error('Error fetching permissions:', error);
     return NextResponse.json(

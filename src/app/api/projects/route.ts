@@ -15,6 +15,7 @@ import { sanitizeString, sanitizeSearchString } from '@/lib/xss';
 import { generateIdempotencyKey, checkIdempotencyKey, storeIdempotencyKey } from '@/lib/idempotency';
 import { resolveProjectCustomerSnapshot } from '@/lib/project-customer-snapshot';
 import { formatDateField } from '@/lib/utils';
+import { normalizeProjectTypeCode, normalizeProjectTypeCodes, serializeProjectTypeCodes } from '@/lib/project-type-codec';
 
 // GET - 获取项目列表
 export const GET = withAuth(async (req: NextRequest, { userId, user }) => {
@@ -244,6 +245,7 @@ export const GET = withAuth(async (req: NextRequest, { userId, user }) => {
 export const POST = withAuth(async (request: NextRequest, { userId }) => {
   try {
     const body = await request.json();
+    const requestedProjectTypeCodes = normalizeProjectTypeCodes(body.projectTypes ?? body.projectType);
 
     // XSS防护：清理用户输入
     const sanitizedName = sanitizeString(body.projectName || '');
@@ -288,11 +290,11 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
         missingFields.push('客户名称');
       }
       // 项目类型：支持 projectTypeId 或 projectType
-      if (!body.projectTypeId && !body.projectType) {
+      if (!body.projectTypeId && requestedProjectTypeCodes.length === 0) {
         missingFields.push('项目类型');
       }
       if (!body.estimatedAmount) {
-        missingFields.push('预计预算');
+        missingFields.push('项目预算');
       }
       if (!body.region) {
         missingFields.push('区域');
@@ -309,10 +311,10 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
     if (body.estimatedAmount !== undefined && body.estimatedAmount !== null) {
       const amount = parseFloat(body.estimatedAmount);
       if (!isNaN(amount) && amount > MAX_BUDGET) {
-        return errorResponse('BAD_REQUEST', `预计预算不能超过 ${MAX_BUDGET.toLocaleString()} 元`);
+        return errorResponse('BAD_REQUEST', `项目预算不能超过 ${MAX_BUDGET.toLocaleString()} 元`);
       }
       if (!isNaN(amount) && amount < 0) {
-        return errorResponse('BAD_REQUEST', '预计预算不能为负数');
+        return errorResponse('BAD_REQUEST', '项目预算不能为负数');
       }
     }
 
@@ -391,35 +393,57 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
 
     // 处理项目类型：如果传入的是 projectType 字符串，查找对应的 projectTypeId
     let projectTypeId = body.projectTypeId || null;
-    let projectTypeCode = body.projectType || null;
-    
-    // 如果只有 projectType 字符串，从项目类型表查找对应的 ID
-    if (!projectTypeId && projectTypeCode) {
+    let projectTypeCode = serializeProjectTypeCodes(requestedProjectTypeCodes);
+
+    if (body.projectTypeId || requestedProjectTypeCodes.length > 0) {
       try {
         const { projectTypes } = await import('@/db/schema');
-        const { or, and, isNull, sql } = await import('drizzle-orm');
-        const normalizedProjectTypeCode = projectTypeCode.trim().toLowerCase();
-        
-        // 兼容历史大写编码和当前小写字典编码。
-        const typeItem = await db
-          .select()
+        const activeProjectTypes = await db
+          .select({ id: projectTypes.id, code: projectTypes.code, name: projectTypes.name })
           .from(projectTypes)
-          .where(and(
-            or(
-              sql`LOWER(${projectTypes.name}) = ${normalizedProjectTypeCode}`,
-              sql`LOWER(${projectTypes.code}) = ${normalizedProjectTypeCode}`,
-              // 也尝试匹配不带"项目"后缀的名称
-              sql`LOWER(${projectTypes.name}) = ${`${normalizedProjectTypeCode}项目`}`
-            ),
-            isNull(projectTypes.deletedAt)
-          ))
-          .limit(1);
-        
-        if (typeItem.length > 0) {
-          projectTypeId = typeItem[0].id;
-          projectTypeCode = typeItem[0].code;
+          .where(isNull(projectTypes.deletedAt));
+
+        const resolvedCodes: string[] = [];
+
+        if (body.projectTypeId) {
+          const primaryType = activeProjectTypes.find((item) => item.id === Number(body.projectTypeId));
+          if (!primaryType) {
+            return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
+          }
+          projectTypeId = primaryType.id;
+          if (requestedProjectTypeCodes.length === 0) {
+            resolvedCodes.push(primaryType.code);
+          }
         }
+
+        requestedProjectTypeCodes.forEach((requestedCode) => {
+          const normalizedRequestedCode = normalizeProjectTypeCode(requestedCode);
+          const matchedType = activeProjectTypes.find((item) => {
+            const normalizedCode = normalizeProjectTypeCode(item.code);
+            const normalizedName = normalizeProjectTypeCode(item.name);
+            return normalizedCode === normalizedRequestedCode
+              || normalizedName === normalizedRequestedCode
+              || `${normalizedName}项目` === normalizedRequestedCode;
+          });
+
+          if (!matchedType) {
+            throw new Error(`PROJECT_TYPE_NOT_FOUND:${requestedCode}`);
+          }
+
+          if (!projectTypeId) {
+            projectTypeId = matchedType.id;
+          }
+
+          if (!resolvedCodes.includes(matchedType.code)) {
+            resolvedCodes.push(matchedType.code);
+          }
+        });
+
+        projectTypeCode = serializeProjectTypeCodes(resolvedCodes);
       } catch (e) {
+        if (e instanceof Error && e.message.startsWith('PROJECT_TYPE_NOT_FOUND:')) {
+          return errorResponse('BAD_REQUEST', `指定的项目类型不存在: ${e.message.replace('PROJECT_TYPE_NOT_FOUND:', '')}`);
+        }
         console.error('Failed to find project type ID:', e);
       }
     }
@@ -448,7 +472,7 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
         customerId: customerSnapshot.customerId,
         customerName: customerSnapshot.customerName,
         projectTypeId: projectTypeId,
-        projectType: projectTypeCode, // 保存项目类型代码
+        projectType: projectTypeCode, // 保存项目类型代码，支持逗号分隔的多值协议
         industry: body.industry || null,
         region: body.region || null,
         description: sanitizedDescription,
@@ -513,7 +537,8 @@ export const PUT = withAuth(async (request: NextRequest, context: { userId: numb
   try {
     const userId = context.userId;
     const body = await request.json();
-    const { id, projectName, customerId, customerName, projectTypeId, industry, region, description, managerId, deliveryManagerId, estimatedAmount, startDate, endDate, expectedDeliveryDate, priority, progress, risks, projectStage } = body;
+    const requestedProjectTypeCodes = normalizeProjectTypeCodes(body.projectTypes ?? body.projectType);
+    const { id, projectName, customerId, customerName, projectTypeId, projectType, industry, region, description, managerId, deliveryManagerId, estimatedAmount, startDate, endDate, expectedDeliveryDate, priority, progress, risks, projectStage } = body;
 
     if (!id) {
       return errorResponse('BAD_REQUEST', '缺少项目ID');
@@ -546,10 +571,10 @@ export const PUT = withAuth(async (request: NextRequest, context: { userId: numb
     if (estimatedAmount !== undefined && estimatedAmount !== null) {
       const amount = parseFloat(estimatedAmount);
       if (!isNaN(amount) && amount > MAX_BUDGET) {
-        return errorResponse('BAD_REQUEST', `预计预算不能超过 ${MAX_BUDGET.toLocaleString()} 元`);
+        return errorResponse('BAD_REQUEST', `项目预算不能超过 ${MAX_BUDGET.toLocaleString()} 元`);
       }
       if (!isNaN(amount) && amount < 0) {
-        return errorResponse('BAD_REQUEST', '预计预算不能为负数');
+        return errorResponse('BAD_REQUEST', '项目预算不能为负数');
       }
     }
 
@@ -623,6 +648,65 @@ export const PUT = withAuth(async (request: NextRequest, context: { userId: numb
       return errorResponse('BAD_REQUEST', '结束日期不能早于开始日期');
     }
 
+    let resolvedProjectTypeId = projectTypeId;
+    let resolvedProjectTypeCode = projectType !== undefined ? projectType : currentProject.projectType;
+
+    if (projectTypeId !== undefined || projectType !== undefined || body.projectTypes !== undefined) {
+      const { projectTypes } = await import('@/db/schema');
+      const activeProjectTypes = await db
+        .select({ id: projectTypes.id, code: projectTypes.code, name: projectTypes.name })
+        .from(projectTypes)
+        .where(isNull(projectTypes.deletedAt));
+
+      const resolvedCodes: string[] = [];
+
+      if ((projectType !== undefined || body.projectTypes !== undefined) && projectTypeId === undefined) {
+        resolvedProjectTypeId = undefined;
+      }
+
+      if (resolvedProjectTypeId !== undefined && resolvedProjectTypeId !== null && resolvedProjectTypeId !== '') {
+        const primaryType = activeProjectTypes.find((item) => item.id === Number(resolvedProjectTypeId));
+        if (!primaryType) {
+          return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
+        }
+        resolvedProjectTypeId = primaryType.id;
+        if (requestedProjectTypeCodes.length === 0) {
+          resolvedCodes.push(primaryType.code);
+        }
+      }
+
+      requestedProjectTypeCodes.forEach((requestedCode) => {
+        const normalizedRequestedCode = normalizeProjectTypeCode(requestedCode);
+        const matchedType = activeProjectTypes.find((item) => {
+          const normalizedCode = normalizeProjectTypeCode(item.code);
+          const normalizedName = normalizeProjectTypeCode(item.name);
+          return normalizedCode === normalizedRequestedCode
+            || normalizedName === normalizedRequestedCode
+            || `${normalizedName}项目` === normalizedRequestedCode;
+        });
+
+        if (!matchedType) {
+          throw new Error(`PROJECT_TYPE_NOT_FOUND:${requestedCode}`);
+        }
+
+        if (!resolvedProjectTypeId) {
+          resolvedProjectTypeId = matchedType.id;
+        }
+
+        if (!resolvedCodes.includes(matchedType.code)) {
+          resolvedCodes.push(matchedType.code);
+        }
+      });
+
+      if (!resolvedProjectTypeId) {
+        return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
+      }
+
+      resolvedProjectTypeCode = serializeProjectTypeCodes(
+        resolvedCodes.length > 0 ? resolvedCodes : normalizeProjectTypeCodes(currentProject.projectType)
+      );
+    }
+
     // 更新项目
     const updatedProject = await db
       .update(projects)
@@ -630,7 +714,8 @@ export const PUT = withAuth(async (request: NextRequest, context: { userId: numb
         projectName: projectName || projectList[0].projectName,
         customerId: customerSnapshot.customerId,
         customerName: customerSnapshot.customerName,
-        projectTypeId: projectTypeId !== undefined ? projectTypeId : projectList[0].projectTypeId,
+        projectTypeId: projectTypeId !== undefined || projectType !== undefined || body.projectTypes !== undefined ? resolvedProjectTypeId : projectList[0].projectTypeId,
+        projectType: projectTypeId !== undefined || projectType !== undefined || body.projectTypes !== undefined ? resolvedProjectTypeCode : projectList[0].projectType,
         industry: industry !== undefined ? industry : projectList[0].industry,
         region: region !== undefined ? region : projectList[0].region,
         description: description !== undefined ? description : projectList[0].description,

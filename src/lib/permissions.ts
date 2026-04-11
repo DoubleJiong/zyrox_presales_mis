@@ -79,6 +79,7 @@ export const PERMISSIONS = {
   // 数据大屏
   DATASCREEN_VIEW: 'datascreen:view',
   DATASCREEN_EXPORT: 'datascreen:export',
+  TEAM_EXECUTION_COCKPIT_VIEW: 'team-execution-cockpit:view',
 
   // 操作日志
   LOG_VIEW: 'log:view',
@@ -150,6 +151,7 @@ export const SYSTEM_ROLES = {
       PERMISSIONS.DICT_UPDATE,
       PERMISSIONS.DATASCREEN_VIEW,
       PERMISSIONS.DATASCREEN_EXPORT,
+      PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW,
       PERMISSIONS.LOG_VIEW,
       PERMISSIONS.WORKSPACE_VIEW,
     ],
@@ -186,6 +188,7 @@ export const SYSTEM_ROLES = {
       PERMISSIONS.ARBITRATION_CREATE,
       PERMISSIONS.USER_VIEW,
       PERMISSIONS.DATASCREEN_VIEW,
+      PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW,
       PERMISSIONS.LOG_VIEW,
       PERMISSIONS.WORKSPACE_VIEW,
     ],
@@ -346,6 +349,7 @@ export const PERMISSION_GROUPS = {
     permissions: [
       { key: PERMISSIONS.DATASCREEN_VIEW, label: '查看大屏' },
       { key: PERMISSIONS.DATASCREEN_EXPORT, label: '导出数据' },
+      { key: PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW, label: '查看团队执行驾驶舱' },
     ],
   },
   log: {
@@ -443,7 +447,22 @@ export const API_PERMISSIONS: Record<string, Permission[]> = {
   // 数据大屏
   'GET:/api/data-screen': [PERMISSIONS.DATASCREEN_VIEW],
   'GET:/api/data-screen/overview': [PERMISSIONS.DATASCREEN_VIEW],
+  'GET:/api/data-screen/personnel-view': [PERMISSIONS.DATASCREEN_VIEW],
+  'GET:/api/data-screen/region-view': [PERMISSIONS.DATASCREEN_VIEW],
+  'GET:/api/data-screen/region-detail': [PERMISSIONS.DATASCREEN_VIEW],
   'GET:/api/data-screen/heatmap': [PERMISSIONS.DATASCREEN_VIEW],
+  'GET:/api/data-screen/map': [PERMISSIONS.DATASCREEN_VIEW],
+  'GET:/api/data-screen/panels': [PERMISSIONS.DATASCREEN_VIEW],
+  'GET:/api/data-screen/presales-focus-summary': [PERMISSIONS.DATASCREEN_VIEW],
+  'GET:/api/data-screen/rankings': [PERMISSIONS.DATASCREEN_VIEW],
+  'GET:/api/data-screen/stream': [PERMISSIONS.DATASCREEN_VIEW],
+  'GET:/api/data-screen/team-execution/customer': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
+  'GET:/api/data-screen/team-execution/detail': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
+  'GET:/api/data-screen/team-execution/project': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
+  'GET:/api/data-screen/team-execution/risk': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
+  'GET:/api/data-screen/team-execution/role': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
+  'GET:/api/data-screen/team-execution/solution': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
+  'GET:/api/data-screen/team-execution/summary': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
 
   // 日志
   'GET:/api/logs': [PERMISSIONS.LOG_VIEW],

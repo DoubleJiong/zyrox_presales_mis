@@ -1496,7 +1496,7 @@ test.describe('stability sweep', () => {
 
       await page.goto('/data-screen');
       await expect(page.getByTestId('data-screen-page')).toBeVisible();
-      await expect(page.getByRole('heading', { name: '双江数据大屏' })).toBeVisible();
+      await expect(page.getByTestId('data-screen-primary-view-bar')).toBeVisible();
       await expect(page.getByTestId('data-screen-active-view-preset')).toContainText('管理层视图');
       await expect(page.getByTestId('data-screen-management-focus-panel')).toBeVisible();
     } finally {

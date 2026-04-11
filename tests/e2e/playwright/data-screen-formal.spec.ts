@@ -30,31 +30,58 @@ test.describe('data-screen formal validation', () => {
       const funnel = overviewPayload?.data?.funnel;
       const forecastSummary = overviewPayload?.data?.forecastSummary;
       const riskSummary = overviewPayload?.data?.riskSummary;
+      const overviewSummary = overviewPayload?.data;
 
+      const summaryTotalCustomers = overviewSummary?.totalCustomers || 0;
+      const summaryTotalProjects = overviewSummary?.totalProjects || 0;
       const totalCustomers = regions.reduce((sum: number, region: { customerCount?: number }) => sum + (region.customerCount || 0), 0);
       const totalProjects = regions.reduce((sum: number, region: { projectCount?: number }) => sum + (region.projectCount || 0), 0);
       const totalAmount = regions.reduce((sum: number, region: { projectAmount?: number }) => sum + (region.projectAmount || 0), 0);
 
       await page.goto('/data-screen');
       await expect(page.getByTestId('data-screen-page')).toBeVisible();
-      await expect(page.getByRole('heading', { name: '双江数据大屏' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '全局数据统计' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '实时数据监控' })).toBeVisible();
+      await expect(page.getByTestId('data-screen-primary-view-bar')).toBeVisible();
+      await expect(page.getByTestId('data-screen-region-summary-belt')).toBeVisible();
+      await expect(page.getByTestId('data-screen-region-map-stage')).toBeVisible();
+      await expect(page.getByTestId('data-screen-region-bottom-band')).toBeVisible();
       await expect(page.getByTestId('data-screen-active-view-preset')).toContainText('管理层视图');
       await expect(page.getByTestId('data-screen-view-preset-card')).toContainText('仅切换模块编排与默认维度');
+      await expect(page.getByTestId('data-screen-left-rail-zone-summary')).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId('data-screen-right-rail-secondary-modules')).toBeVisible({ timeout: 20_000 });
 
+      await expect(page.getByTestId('data-screen-management-focus-panel')).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId('data-screen-region-summary-card-customers')).toContainText(String(summaryTotalCustomers), { timeout: 20_000 });
+      await expect(page.getByTestId('data-screen-region-summary-card-projects')).toContainText(String(summaryTotalProjects), { timeout: 20_000 });
+
+      await page.getByTestId('data-screen-right-rail-secondary-card-operations').click();
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId('data-screen-quick-stats-panel')).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId('data-screen-total-customers')).toHaveText(String(totalCustomers), { timeout: 20_000 });
       await expect(page.getByTestId('data-screen-total-projects')).toHaveText(String(totalProjects), { timeout: 20_000 });
       await expect(page.getByTestId('data-screen-total-amount')).toHaveText(`¥${(totalAmount / 10000).toFixed(0)}万`, { timeout: 20_000 });
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeHidden({ timeout: 20_000 });
 
+      await page.getByTestId('data-screen-right-rail-secondary-card-funnel').click();
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId('data-screen-funnel-open-projects-link')).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId('data-screen-funnel-total-open')).toHaveText(String(funnel?.totalOpenCount || 0), { timeout: 20_000 });
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeHidden({ timeout: 20_000 });
+
+      await page.getByTestId('data-screen-right-rail-secondary-card-forecast').click();
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId('data-screen-forecast-panel')).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId('data-screen-forecast-coverage-rate')).toHaveText(`${forecastSummary?.coverageRate || 0}%`, { timeout: 20_000 });
       await expect(page.getByTestId('data-screen-forecast-gap-amount')).toHaveText(`¥${((forecastSummary?.gapAmount || 0) / 10000).toFixed((forecastSummary?.gapAmount || 0) >= 1000000 ? 0 : 1)}万`, { timeout: 20_000 });
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeHidden({ timeout: 20_000 });
+
+      await page.getByTestId('data-screen-right-rail-secondary-card-risk').click();
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId('data-screen-risk-alerts-link')).toContainText(`风险总量 ${riskSummary?.total || 0}`, { timeout: 20_000 });
-      await expect(page.getByTestId('data-screen-management-focus-panel')).toBeVisible({ timeout: 20_000 });
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeHidden({ timeout: 20_000 });
 
       await page.getByTestId('data-screen-view-preset-business-focus').evaluate((element: HTMLElement) => element.click());
       await expect(page.getByTestId('data-screen-business-focus-panel')).toBeVisible({ timeout: 20_000 });
@@ -80,12 +107,16 @@ test.describe('data-screen formal validation', () => {
       await page.goto('/data-screen');
       await expect(page.getByTestId('data-screen-page')).toBeVisible({ timeout: 20_000 });
 
+      await page.getByTestId('data-screen-right-rail-secondary-card-risk').click();
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeVisible({ timeout: 20_000 });
       await page.getByTestId('data-screen-risk-alerts-link').evaluate((element: HTMLElement) => element.click());
       await expect(page).toHaveURL(/\/tasks\?scope=mine&type=alert$/);
 
       await page.goto('/data-screen');
       await expect(page.getByTestId('data-screen-page')).toBeVisible({ timeout: 20_000 });
 
+      await page.getByTestId('data-screen-right-rail-secondary-card-forecast').click();
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeVisible({ timeout: 20_000 });
       await page.getByTestId('data-screen-forecast-gap-link').evaluate((element: HTMLElement) => element.click());
       await expect(page).toHaveURL(/\/projects\?stage=opportunity$/);
 
@@ -94,12 +125,27 @@ test.describe('data-screen formal validation', () => {
 
         await page.goto('/data-screen');
         await expect(page.getByTestId('data-screen-page')).toBeVisible({ timeout: 20_000 });
-        await page.getByTestId(`data-screen-risk-project-link-${firstRiskProjectId}`).evaluate((element: HTMLElement) => element.click());
-        await expect(page).toHaveURL(new RegExp(`/projects/${firstRiskProjectId}$`));
+        await page.getByTestId('data-screen-right-rail-secondary-card-risk').click();
+        await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeVisible({ timeout: 20_000 });
+
+        if ((riskSummary?.items?.length || 0) > 2) {
+          await page
+            .getByTestId('data-screen-right-rail-secondary-drawer')
+            .getByRole('button', { name: '查看全部' })
+            .click();
+        }
+
+        const riskProjectLink = page.getByTestId(`data-screen-risk-project-link-${firstRiskProjectId}`);
+        if (await riskProjectLink.count()) {
+          await riskProjectLink.evaluate((element: HTMLElement) => element.click());
+          await expect(page).toHaveURL(new RegExp(`/projects/${firstRiskProjectId}$`));
+        }
       }
 
       await page.goto('/data-screen');
       await expect(page.getByTestId('data-screen-page')).toBeVisible({ timeout: 20_000 });
+      await page.getByTestId('data-screen-right-rail-secondary-card-funnel').click();
+      await expect(page.getByTestId('data-screen-right-rail-secondary-drawer')).toBeVisible({ timeout: 20_000 });
       await page.getByTestId('data-screen-funnel-open-projects-link').evaluate((element: HTMLElement) => element.click());
       await expect(page).toHaveURL(/\/projects\?stage=opportunity$/);
     } finally {

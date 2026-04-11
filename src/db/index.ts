@@ -8,29 +8,35 @@ import { getEnv } from '@/shared/config/env';
 
 const { DATABASE_URL } = getEnv();
 
-// 优化的连接池配置
-const client = postgres(DATABASE_URL, {
-  // 连接池大小配置
-  max: 20,                    // 最大连接数（增加以处理更多并发）
-  
-  // 超时配置
-  connect_timeout: 15,        // 连接超时（秒）- 适当增加
-  idle_timeout: 30,           // 空闲连接超时（秒）- 增加以减少重连
-  max_lifetime: 60 * 60,      // 连接最大生命周期（1小时）
-  
-  // 性能优化
-  prepare: false,             // 禁用预处理语句（解决某些环境兼容性问题）
-  fetch_types: false,         // 禁用类型获取（减少启动时间）
-  
-  // 错误处理
-  onnotice: () => {},         // 忽略 NOTICE 消息
-  onclose: () => {},          // 连接关闭回调
-  
-  // 调试（生产环境关闭）
-  debug: false,
-});
+type PostgresClient = ReturnType<typeof postgres>;
 
-export const db = drizzle(client, { schema });
+declare global {
+  var __presalesPostgresClient__: PostgresClient | undefined;
+  var __presalesDrizzleDb__:
+    | ReturnType<typeof drizzle<typeof schema>>
+    | undefined;
+}
+
+function createClient(): PostgresClient {
+  return postgres(DATABASE_URL, {
+    // 在 next dev 热重载下复用全局连接池，避免不断创建新客户端把数据库打满。
+    max: 5,
+    connect_timeout: 15,
+    idle_timeout: 30,
+    max_lifetime: 60 * 60,
+    prepare: false,
+    fetch_types: false,
+    onnotice: () => {},
+    onclose: () => {},
+    debug: false,
+  });
+}
+
+export const client = globalThis.__presalesPostgresClient__ ?? createClient();
+globalThis.__presalesPostgresClient__ = client;
+
+export const db = globalThis.__presalesDrizzleDb__ ?? drizzle(client, { schema });
+globalThis.__presalesDrizzleDb__ = db;
 
 // 检测数据库是否可用
 export async function checkDatabaseConnection(): Promise<boolean> {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { solutionSubSchemes, solutions, users } from '@/db/schema';
+import { solutionFiles, solutionSubSchemes, solutions, users } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { authenticate } from '@/lib/auth';
 import { validateSubSchemeInput, sanitizeInput } from '@/lib/input-validation';
@@ -91,9 +91,29 @@ export async function GET(
           .from(solutionSubSchemes)
           .where(eq(solutionSubSchemes.parentSubSchemeId, subScheme.id));
 
+        const files = await db
+          .select({
+            id: solutionFiles.id,
+            subSchemeId: solutionFiles.subSchemeId,
+            fileName: solutionFiles.fileName,
+            fileType: solutionFiles.fileType,
+            fileSize: solutionFiles.fileSize,
+            fileUrl: solutionFiles.fileUrl,
+            version: solutionFiles.version,
+            isCurrent: solutionFiles.isCurrent,
+            description: solutionFiles.description,
+            createdAt: solutionFiles.createdAt,
+            uploadedByName: users.realName,
+          })
+          .from(solutionFiles)
+          .leftJoin(users, eq(solutionFiles.uploadedBy, users.id))
+          .where(eq(solutionFiles.subSchemeId, subScheme.id))
+          .orderBy(desc(solutionFiles.isCurrent), desc(solutionFiles.createdAt));
+
         return {
           ...subScheme,
           childrenCount: Number(count),
+          files,
         };
       })
     );

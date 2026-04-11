@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('frontend smoke: login page renders', async ({ page }) => {
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  const loginForm = page.locator('main form[data-testid="login-form"]');
+  const loginForm = page.locator('form[data-testid="login-form"]');
 
   await expect(page.locator('[data-slot="card-title"]')).toHaveText('售前管理系统');
   await expect(loginForm).toBeVisible();
@@ -24,10 +24,13 @@ test('backend smoke: protected dashboard requires authentication', async ({ requ
 
 test('e2e smoke: login form remains interactive and shows client validation', async ({ page }) => {
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('main form[data-testid="login-form"]');
+  await page.waitForSelector('form[data-testid="login-form"]');
+  await page.waitForLoadState('networkidle');
 
   await page.locator('#email').fill('invalid-email');
   await page.locator('#password').fill('123');
+  await page.locator('#email').blur();
+  await page.locator('#password').blur();
   await page.getByRole('button', { name: '登录' }).click();
 
   await expect(page.getByText('请输入有效的邮箱地址')).toBeVisible();

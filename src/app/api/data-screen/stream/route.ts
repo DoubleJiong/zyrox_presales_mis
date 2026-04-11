@@ -4,6 +4,7 @@ import { messages, projects } from '@/db/schema';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { withAuth } from '@/lib/auth-middleware';
+import { PERMISSIONS } from '@/lib/permissions';
 import { getProjectDisplayStatusLabel } from '@/lib/project-display';
 
 // GET - 获取实时消息流
@@ -47,6 +48,8 @@ export const GET = withAuth(async (request: NextRequest, { userId }) => {
     console.error('Failed to fetch stream messages:', error);
     return errorResponse('INTERNAL_ERROR', '获取消息流失败');
   }
+}, {
+  requiredPermissions: [PERMISSIONS.DATASCREEN_VIEW],
 });
 
 // 生成基于项目活动的动态消息

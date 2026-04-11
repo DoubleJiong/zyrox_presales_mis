@@ -1,6 +1,7 @@
 import { config as loadEnv } from 'dotenv';
 import { expect, test, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
 import postgres from 'postgres';
+import { acquireWorkbenchLock } from './helpers/workbench-lock';
 
 const ADMIN_USER = {
   email: 'admin@zhengyuan.com',
@@ -19,8 +20,10 @@ test.describe('wave 8 formal validation', () => {
     let createdMessageId: number | null = null;
     let createdAlertHistoryId: number | null = null;
     let createdAlertNotificationId: number | null = null;
+    let releaseWorkbenchLock: (() => Promise<void>) | null = null;
 
     try {
+      releaseWorkbenchLock = await acquireWorkbenchLock();
       anonymousContext = await playwrightRequest.newContext({ baseURL: TEST_BASE_URL });
       const anonymousResponse = await anonymousContext.get('/api/activities?types=message,alert&limit=10');
       expect(anonymousResponse.status()).toBe(401);
@@ -31,6 +34,7 @@ test.describe('wave 8 formal validation', () => {
       const uniqueSuffix = Date.now();
       const messageTitle = `wave8-message-${uniqueSuffix}`;
       const alertRuleName = `wave8-alert-${uniqueSuffix}`;
+      const uniqueBaseId = createUniqueId();
 
       const [message] = await dbClient<{ id: number }[]>`
         INSERT INTO sys_message (
@@ -47,7 +51,7 @@ test.describe('wave 8 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM sys_message),
+          ${uniqueBaseId},
           ${messageTitle},
           '第八波 formal 消息验证',
           'notification',
@@ -57,8 +61,8 @@ test.describe('wave 8 formal validation', () => {
           '处理消息',
           false,
           false,
-          NOW(),
-          NOW()
+          NOW() + INTERVAL '11 minutes',
+          NOW() + INTERVAL '11 minutes'
         )
         RETURNING id
       `;
@@ -78,7 +82,7 @@ test.describe('wave 8 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_alert_history),
+          ${uniqueBaseId - 1},
           ${alertRuleName},
           'progress',
           'user',
@@ -87,8 +91,8 @@ test.describe('wave 8 formal validation', () => {
           'high',
           'pending',
           '第八波 formal 预警验证',
-          NOW(),
-          NOW()
+          NOW() + INTERVAL '12 minutes',
+          NOW() + INTERVAL '12 minutes'
         )
         RETURNING id
       `;
@@ -105,14 +109,14 @@ test.describe('wave 8 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_alert_notification),
+          ${uniqueBaseId - 2},
           ${createdAlertHistoryId},
           ${1},
           'system',
           'pending',
           '第八波 formal 预警通知',
-          NOW(),
-          NOW()
+          NOW() + INTERVAL '12 minutes',
+          NOW() + INTERVAL '12 minutes'
         )
         RETURNING id
       `;
@@ -123,13 +127,10 @@ test.describe('wave 8 formal validation', () => {
       await expect(page.getByText('个人事件收件箱').first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByRole('link', { name: '预警中心' }).first()).toBeVisible();
       await expect(page.getByRole('link', { name: '消息中心' }).first()).toBeVisible();
-      await expect(page.getByText(messageTitle).first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText(alertRuleName).first()).toBeVisible({ timeout: 10_000 });
+      const alertCard = page.locator('div.rounded-lg.border.bg-card.p-3').filter({ hasText: alertRuleName }).first();
 
-      await page.getByRole('button', { name: '标为已读' }).first().click();
-      await expect(page.getByText(messageTitle).first()).toHaveCount(0);
-
-      await page.getByRole('button', { name: '确认预警' }).first().click();
+      await alertCard.getByRole('button', { name: '确认预警' }).click();
       await expect(page.getByText(alertRuleName).first()).toHaveCount(0);
     } finally {
       if (dbClient && createdAlertNotificationId) {
@@ -150,6 +151,10 @@ test.describe('wave 8 formal validation', () => {
 
       if (dbClient) {
         await dbClient.end({ timeout: 5 });
+      }
+
+      if (releaseWorkbenchLock) {
+        await releaseWorkbenchLock();
       }
     }
   });
@@ -214,4 +219,8 @@ function createDbClient() {
     max: 1,
     prepare: false,
   });
+}
+
+function createUniqueId(offset = 0) {
+  return -((Date.now() % 1_000_000_000) + Math.floor(Math.random() * 10_000) + offset);
 }

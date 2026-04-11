@@ -243,15 +243,15 @@ export function formatPercent(value: number): string {
 /**
  * 获取热力图配置
  */
-export function getHeatmapConfig(type: string): { label: string; unit: string; field: keyof HeatmapRegionData } {
-  const configs: Record<string, { label: string; unit: string; field: keyof HeatmapRegionData }> = {
-    'customer': { label: '客户总数', unit: '家', field: 'customerCount' },
-    'project': { label: '项目总数', unit: '个', field: 'projectCount' },
-    'budget': { label: '资金预算', unit: '万', field: 'budget' },
-    'contract': { label: '中标金额', unit: '万', field: 'contractAmount' },
-    'activity': { label: '售前活动', unit: '人次', field: 'preSalesActivity' },
-    'solution': { label: '方案引用', unit: '次', field: 'solutionUsage' },
-    'amount': { label: '项目金额', unit: '万', field: 'projectAmount' },
+export function getHeatmapConfig(type: string): { label: string; unit: string; field: keyof HeatmapRegionData; color: string } {
+  const configs: Record<string, { label: string; unit: string; field: keyof HeatmapRegionData; color: string }> = {
+    'customer': { label: '客户总数', unit: '家', field: 'customerCount', color: '#00D4FF' },
+    'project': { label: '项目总数', unit: '个', field: 'projectCount', color: '#34D399' },
+    'budget': { label: '资金预算', unit: '万', field: 'budget', color: '#6EE7FF' },
+    'contract': { label: '中标金额', unit: '万', field: 'contractAmount', color: '#FBBF24' },
+    'activity': { label: '售前活动', unit: '人次', field: 'preSalesActivity', color: '#34D399' },
+    'solution': { label: '方案引用', unit: '次', field: 'solutionUsage', color: '#FFB020' },
+    'amount': { label: '项目金额', unit: '万', field: 'projectAmount', color: '#A78BFA' },
   };
   
   return configs[type] || configs['project'];

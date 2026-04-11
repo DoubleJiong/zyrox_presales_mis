@@ -38,6 +38,8 @@ import { useToast } from '@/hooks/use-toast';
 
 // 周报数据类型
 interface WeeklyReportData {
+  id?: number;
+  type?: string;
   weekInfo: {
     year: number;
     week: number;
@@ -141,22 +143,36 @@ export function WeeklyReportDialog({ open, onOpenChange, reportType = 'weekly' }
 
   const reportConfig = getReportConfig(reportType);
 
-  // 当对话框打开时，自动生成周报
+  // 当对话框打开或报告类型切换时，重新生成报告
   useEffect(() => {
     if (open) {
       generateReport();
     }
-  }, [open]);
+  }, [open, reportType]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 生成周报
+  // 生成报告（根据 reportType 使用不同日期范围）
   const generateReport = async () => {
     setLoading(true);
     try {
       const today = new Date();
-      const week = getWeekNumber(today);
-      const year = today.getFullYear();
+      let url: string;
 
-      const response = await fetch(`/api/reports/weekly?year=${year}&week=${week}`, {
+      if (reportType === 'monthly') {
+        const year = today.getFullYear();
+        const month = today.getMonth();
+        const startDate = new Date(year, month, 1).toISOString().split('T')[0];
+        const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+        url = `/api/reports/weekly?startDate=${startDate}&endDate=${endDate}`;
+      } else if (reportType === 'yearly') {
+        const year = today.getFullYear();
+        url = `/api/reports/weekly?startDate=${year}-01-01&endDate=${year}-12-31`;
+      } else {
+        const week = getWeekNumber(today);
+        const year = today.getFullYear();
+        url = `/api/reports/weekly?year=${year}&week=${week}`;
+      }
+
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -171,7 +187,7 @@ export function WeeklyReportDialog({ open, onOpenChange, reportType = 'weekly' }
         // error 可能是字符串或 { code, message } 对象
         const errorMsg = typeof result.error === 'string'
           ? result.error
-          : (result.error?.message || '生成周报失败，请稍后重试');
+          : (result.error?.message || '生成报告失败，请稍后重试');
         toast({
           title: '生成失败',
           description: errorMsg,
@@ -212,9 +228,18 @@ export function WeeklyReportDialog({ open, onOpenChange, reportType = 'weekly' }
       const result = await response.json();
       
       if (result.success) {
+        setReportData((current) => current ? {
+          ...current,
+          id: result.data.id ?? current.id,
+          type: result.data.type ?? current.type,
+          generatedContent: result.data.generatedContent ?? editedContent,
+        } : current);
+        if (typeof result.data.generatedContent === 'string') {
+          setEditedContent(result.data.generatedContent);
+        }
         toast({
           title: '保存成功',
-          description: '周报已保存',
+          description: '周报已保存到正式记录',
         });
         setIsEditing(false);
       } else {

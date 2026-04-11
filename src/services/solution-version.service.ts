@@ -8,8 +8,8 @@
  * - 版本回滚
  * 
  * 注意：数据库字段映射
- * - creator_id (而非 author_id)
- * - is_current (而非 isLatest)
+ * - author_id 是版本作者字段，对外仍映射为 creatorId
+ * - is_latest 是当前版本标记，对外仍映射为 isCurrent
  * - is_published (而非 isPublished)
  */
 
@@ -26,6 +26,7 @@ import { fileCompareService, FileCompareResult } from './file-compare.service';
 // 类型定义
 export interface CreateVersionParams {
   solutionId: number;
+  versionName?: string;
   changeType: 'major' | 'minor' | 'patch';
   changelog: string;
   operatorId: number;
@@ -60,7 +61,7 @@ export class SolutionVersionService {
    * 创建新版本
    */
   async createVersion(params: CreateVersionParams) {
-    const { solutionId, changeType, changelog, operatorId, changeSource = 'manual' } = params;
+    const { solutionId, versionName, changeType, changelog, operatorId, changeSource = 'manual' } = params;
     
     // 1. 获取当前方案数据
     const [solution] = await db.select()
@@ -72,8 +73,8 @@ export class SolutionVersionService {
     }
     
     // 2. 校验是否可以创建版本
-    if (!['draft', 'approved'].includes(solution.status || 'draft')) {
-      throw new Error('只有草稿或已发布状态的方案可以创建版本');
+    if (!['draft', 'reviewing', 'approved'].includes(solution.status || 'draft')) {
+      throw new Error('只有草稿、审核中或已通过状态的方案可以创建版本');
     }
     
     // 3. 计算新版本号
@@ -82,21 +83,21 @@ export class SolutionVersionService {
     // 4. 生成快照
     const snapshot = await this.generateSnapshot(solutionId);
     
-    // 5. 将之前的 is_current 设为 false
+    // 5. 将之前的 is_latest 设为 false
     await db.execute(sql`
       UPDATE bus_solution_version 
-      SET is_current = false 
-      WHERE solution_id = ${solutionId} AND is_current = true
+      SET is_latest = false 
+      WHERE solution_id = ${solutionId} AND is_latest = true
     `);
     
     // 6. 创建新版本记录
     const result = await db.execute(sql`
       INSERT INTO bus_solution_version (
-        solution_id, version, changelog, creator_id, 
-        is_current, is_published, snapshot_data, 
+        solution_id, version, version_name, change_type, changelog, author_id, 
+        is_latest, is_published, snapshot_data, 
         sub_schemes_snapshot, files_snapshot, change_source, created_at
       ) VALUES (
-        ${solutionId}, ${newVersion}, ${changelog}, ${operatorId},
+        ${solutionId}, ${newVersion}, ${versionName ?? null}, ${changeType}, ${changelog}, ${operatorId},
         true, false, ${JSON.stringify(snapshot.solution)}::jsonb,
         ${JSON.stringify(snapshot.subSchemes)}::jsonb,
         ${JSON.stringify(snapshot.files)}::jsonb,
@@ -136,16 +137,19 @@ export class SolutionVersionService {
         v.id,
         v.solution_id,
         v.version,
+        v.version_name,
         v.changelog,
-        v.is_current,
+        v.status,
+        v.is_latest,
         v.is_published,
         v.published_at,
         v.created_at,
-        v.creator_id,
+        v.author_id,
         v.snapshot_data,
+        v.sub_schemes_snapshot,
         u.real_name as creator_name
       FROM bus_solution_version v
-      LEFT JOIN sys_user u ON v.creator_id = u.id
+      LEFT JOIN sys_user u ON v.author_id = u.id
       ${whereClause}
       ORDER BY v.created_at DESC
       LIMIT ${limit}
@@ -155,16 +159,23 @@ export class SolutionVersionService {
       id: row.id,
       solutionId: row.solution_id,
       version: row.version,
-      versionName: null,
+      versionName: row.version_name,
       changelog: row.changelog,
-      status: row.is_published ? 'released' : 'draft',
-      isCurrent: row.is_current,
+      status: row.status || (row.is_published ? 'released' : 'draft'),
+      isCurrent: row.is_latest,
       isPublished: row.is_published,
       publishedAt: row.published_at,
       createdAt: row.created_at,
-      creatorId: row.creator_id,
+      creatorId: row.author_id,
       creatorName: row.creator_name,
-      snapshot: row.snapshot_data,
+      snapshot: row.snapshot_data
+        ? {
+            ...(typeof row.snapshot_data === 'string' ? JSON.parse(row.snapshot_data) : row.snapshot_data),
+            subSchemes: row.sub_schemes_snapshot
+              ? (typeof row.sub_schemes_snapshot === 'string' ? JSON.parse(row.sub_schemes_snapshot) : row.sub_schemes_snapshot)
+              : [],
+          }
+        : null,
     }));
   }
   
@@ -180,16 +191,16 @@ export class SolutionVersionService {
         v.version,
         v.version_name,
         v.changelog,
-        v.is_current,
+        v.is_latest,
         v.is_published,
         v.published_at,
         v.created_at,
-        v.creator_id,
+        v.author_id,
         v.status,
         v.snapshot_data,
         u.real_name as creator_name
       FROM bus_solution_version v
-      LEFT JOIN sys_user u ON v.creator_id = u.id
+      LEFT JOIN sys_user u ON v.author_id = u.id
       WHERE v.id = ${versionId}
     `);
     
@@ -205,11 +216,11 @@ export class SolutionVersionService {
       versionName: row.version_name,
       changelog: row.changelog,
       status: row.status || (row.is_published ? 'released' : 'draft'),
-      isCurrent: row.is_current,
+      isCurrent: row.is_latest,
       isPublished: row.is_published,
       publishedAt: row.published_at,
       createdAt: row.created_at,
-      creatorId: row.creator_id,
+      creatorId: row.author_id,
       creatorName: row.creator_name,
       snapshot: row.snapshot_data,
     };
@@ -281,13 +292,13 @@ export class SolutionVersionService {
     const snapshot = await this.generateSnapshot(version.solutionId);
     
     await db.execute(sql`
-      UPDATE bus_solution_version SET is_current = false WHERE solution_id = ${version.solutionId}
+      UPDATE bus_solution_version SET is_latest = false WHERE solution_id = ${version.solutionId}
     `);
     
     const result = await db.execute(sql`
       INSERT INTO bus_solution_version (
-        solution_id, version, changelog, creator_id, 
-        is_current, is_published, snapshot_data,
+        solution_id, version, changelog, author_id, 
+        is_latest, is_published, snapshot_data,
         sub_schemes_snapshot, files_snapshot, change_source, created_at
       ) VALUES (
         ${version.solutionId}, ${newVersion}, ${`回滚自版本 ${version.version}`}, ${operatorId},

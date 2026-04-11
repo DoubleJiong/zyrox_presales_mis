@@ -15,6 +15,7 @@ import { z } from 'zod';
 
 // 参数验证
 const createVersionSchema = z.object({
+  versionName: z.string().trim().min(1).max(200).optional(),
   changeType: z.enum(['major', 'minor', 'patch']),
   changelog: z.string().min(1, '变更日志不能为空'),
   changeSource: z.enum(['manual', 'edit', 'review', 'auto']).optional(),
@@ -52,6 +53,7 @@ export async function GET(
     return NextResponse.json({
       success: true,
       data: versions,
+      versions,
     });
     
   } catch (error) {
@@ -103,6 +105,7 @@ export async function POST(
     
     const version = await solutionVersionService.createVersion({
       solutionId,
+      versionName: validated.versionName,
       changeType: validated.changeType,
       changelog: validated.changelog,
       operatorId,

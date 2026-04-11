@@ -41,6 +41,18 @@
 			"problemMatcher": [
 				"$tsc"
 			]
+		},
+		{
+			"label": "Run region layout unit test",
+			"type": "shell",
+			"command": "corepack",
+			"args": [
+				"pnpm",
+				"vitest",
+				"run",
+				"tests/unit/dashboard/data-screen-region-layout.test.tsx"
+			],
+			"isBackground": false
 		}
 	]
 }

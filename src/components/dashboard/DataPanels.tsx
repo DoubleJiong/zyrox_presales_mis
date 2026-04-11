@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import ReactECharts from 'echarts-for-react';
+import { DataScreenDrilldownDrawer } from '@/components/dashboard/DataScreenDrilldownDrawer';
 import { techTheme } from '@/lib/tech-theme';
 import { AlertTriangle, Award, ShieldAlert, Users, Target, TrendingUp, Zap, FolderKanban, FileText } from 'lucide-react';
 import type { 
@@ -13,6 +15,219 @@ import type {
 import type { WorkbenchSummaryData } from '@/hooks/use-workbench-summary';
 import type { PresalesFocusSummaryData } from '@/hooks/use-presales-focus-summary';
 import type { MapRegionData } from '@/lib/map-types';
+import type { DataScreenDrilldownAction, DataScreenDrilldownObjectType } from '@/lib/data-screen-drilldown';
+
+const compactMetricValueStyle: CSSProperties = {
+  fontSize: '15px',
+  fontWeight: '600',
+  lineHeight: 1.2,
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+};
+
+const compactMetricLabelStyle: CSSProperties = {
+  color: techTheme.text.secondary,
+  fontSize: '10px',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+};
+
+const singleLineTextStyle: CSSProperties = {
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  minWidth: 0,
+};
+
+const twoLineClampStyle: CSSProperties = {
+  display: '-webkit-box',
+  WebkitBoxOrient: 'vertical',
+  WebkitLineClamp: 2,
+  overflow: 'hidden',
+  minWidth: 0,
+  wordBreak: 'break-word',
+};
+
+const compactCardStyle: CSSProperties = {
+  padding: '8px',
+  borderRadius: '6px',
+  background: 'rgba(0,0,0,0.18)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  minWidth: 0,
+};
+
+const detailCardStyle: CSSProperties = {
+  padding: '10px 12px',
+  borderRadius: '10px',
+  border: '1px solid rgba(0, 212, 255, 0.18)',
+  background: 'rgba(255,255,255,0.03)',
+  display: 'grid',
+  gap: '8px',
+  minWidth: 0,
+};
+
+interface ExpandablePanelSectionProps<T> {
+  title: string;
+  drawerTitle: string;
+  drawerDescription: string;
+  objectType: DataScreenDrilldownObjectType;
+  items: T[];
+  emptyText: string;
+  compactCount?: number;
+  actions?: DataScreenDrilldownAction[];
+  renderCompactItem: (item: T, index: number) => ReactNode;
+  renderDetailItem: (item: T, index: number) => ReactNode;
+}
+
+function ExpandablePanelSection<T>({
+  title,
+  drawerTitle,
+  drawerDescription,
+  objectType,
+  items,
+  emptyText,
+  compactCount = 2,
+  actions = [],
+  renderCompactItem,
+  renderDetailItem,
+}: ExpandablePanelSectionProps<T>) {
+  const [open, setOpen] = useState(false);
+  const visibleItems = items.slice(0, compactCount);
+  const canExpand = items.length > compactCount;
+
+  return (
+    <>
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', ...singleLineTextStyle }}>{title}</div>
+          {canExpand ? (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              style={{
+                border: '1px solid rgba(0, 212, 255, 0.22)',
+                background: 'rgba(0, 212, 255, 0.08)',
+                color: techTheme.colors.primary,
+                borderRadius: '999px',
+                padding: '3px 10px',
+                fontSize: '10px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              查看全部
+            </button>
+          ) : null}
+        </div>
+
+        {visibleItems.length ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {visibleItems.map((item, index) => renderCompactItem(item, index))}
+          </div>
+        ) : (
+          <div style={{ color: techTheme.text.secondary, fontSize: '11px', textAlign: 'center', padding: '10px 0' }}>{emptyText}</div>
+        )}
+      </div>
+
+      <DataScreenDrilldownDrawer
+        open={open}
+        objectType={objectType}
+        title={drawerTitle}
+        description={drawerDescription}
+        actions={actions}
+        onClose={() => setOpen(false)}
+        testId={`panel-drawer-${drawerTitle}`}
+        titleTestId={`panel-drawer-title-${drawerTitle}`}
+      >
+        {items.length ? (
+          items.map((item, index) => renderDetailItem(item, index))
+        ) : (
+          <div style={{ color: techTheme.text.secondary, fontSize: '12px' }}>{emptyText}</div>
+        )}
+      </DataScreenDrilldownDrawer>
+    </>
+  );
+}
+
+function FocusMetricGrid({
+  items,
+}: {
+  items: Array<{ label: string; value: string | number; color: string; testId?: string }>;
+}) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px', marginBottom: '12px' }}>
+      {items.map((item) => (
+        <div key={item.label} style={{ textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', padding: '8px 6px', minWidth: 0 }}>
+          <div data-testid={item.testId} style={{ ...compactMetricValueStyle, color: item.color }}>{item.value}</div>
+          <div style={compactMetricLabelStyle}>{item.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FocusPreviewChart({
+  title,
+  items,
+  variant,
+  emptyText,
+}: {
+  title: string;
+  items: Array<{ label: string; value: string; ratio: number; accentColor: string }>;
+  variant: 'bars' | 'columns' | 'gauges';
+  emptyText: string;
+}) {
+  return (
+    <div style={{ marginBottom: '12px', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.18)' }}>
+      <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', marginBottom: '8px', ...singleLineTextStyle }}>{title}</div>
+      {items.length ? (
+        variant === 'columns' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`, gap: '8px', alignItems: 'end', minHeight: '88px' }}>
+            {items.map((item) => (
+              <div key={`${title}-${item.label}`} style={{ display: 'grid', gap: '5px', alignItems: 'end' }}>
+                <div style={{ height: '44px', display: 'flex', alignItems: 'end' }}>
+                  <div style={{ width: '100%', height: `${Math.max(18, Math.min(100, item.ratio * 100))}%`, borderRadius: '8px 8px 3px 3px', background: `linear-gradient(180deg, ${item.accentColor}, ${item.accentColor}77)` }} />
+                </div>
+                <span style={{ color: techTheme.text.secondary, fontSize: '9px', textAlign: 'center', ...singleLineTextStyle }}>{item.label}</span>
+                <span style={{ color: item.accentColor, fontSize: '9px', fontWeight: '700', textAlign: 'center', ...singleLineTextStyle }}>{item.value}</span>
+              </div>
+            ))}
+          </div>
+        ) : variant === 'gauges' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`, gap: '8px' }}>
+            {items.map((item) => (
+              <div key={`${title}-${item.label}`} style={{ display: 'grid', justifyItems: 'center', gap: '4px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '999px', background: `conic-gradient(${item.accentColor} 0deg ${Math.max(18, Math.min(360, item.ratio * 360))}deg, rgba(255,255,255,0.08) ${Math.max(18, Math.min(360, item.ratio * 360))}deg 360deg)`, display: 'grid', placeItems: 'center' }}>
+                  <div style={{ width: '25px', height: '25px', borderRadius: '999px', background: 'rgba(8,14,24,0.94)', display: 'grid', placeItems: 'center', color: item.accentColor, fontSize: '8px', fontWeight: 700 }}>{Math.round(item.ratio * 100)}%</div>
+                </div>
+                <span style={{ color: techTheme.text.secondary, fontSize: '9px', ...singleLineTextStyle }}>{item.label}</span>
+                <span style={{ color: item.accentColor, fontSize: '9px', fontWeight: '700', ...singleLineTextStyle }}>{item.value}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: '6px' }}>
+            {items.map((item) => (
+              <div key={`${title}-${item.label}`} style={{ display: 'grid', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <span style={{ color: techTheme.text.secondary, fontSize: '10px', ...singleLineTextStyle }}>{item.label}</span>
+                  <span style={{ color: item.accentColor, fontSize: '10px', fontWeight: '700', ...singleLineTextStyle }}>{item.value}</span>
+                </div>
+                <div style={{ height: '6px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.max(12, Math.min(100, item.ratio * 100))}%`, height: '100%', borderRadius: '999px', background: `linear-gradient(90deg, ${item.accentColor}bb, ${item.accentColor})` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+        <div style={{ color: techTheme.text.secondary, fontSize: '11px', textAlign: 'center', padding: '8px 0' }}>{emptyText}</div>
+      )}
+    </div>
+  );
+}
 
 // ==================== 售前数据面板 ====================
 interface SalesPanelProps {
@@ -47,41 +262,66 @@ export function SalesPanel({ data }: SalesPanelProps) {
           <Award size={16} style={{ color: techTheme.colors.primary }} />
           <span style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '600' }}>月度之星</span>
         </div>
-        {performers.map((p, i) => (
-          <div key={p.id} style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '8px',
-            marginBottom: '8px',
-            background: i === 0 ? 'rgba(255, 215, 0, 0.1)' : i === 1 ? 'rgba(192, 192, 192, 0.1)' : i === 2 ? 'rgba(205, 127, 50, 0.1)' : 'transparent',
-            borderRadius: '6px',
-            border: i === 0 ? '1px solid rgba(255, 215, 0, 0.3)' : i === 1 ? '1px solid rgba(192, 192, 192, 0.3)' : i === 2 ? '1px solid rgba(205, 127, 50, 0.3)' : '1px solid transparent',
-          }}>
-            <div style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              background: i === 0 ? 'linear-gradient(135deg, #FFD700, #FFA500)' : i === 1 ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)' : i === 2 ? 'linear-gradient(135deg, #CD7F32, #8B4513)' : techTheme.colors.primary,
+        <ExpandablePanelSection
+          title="签约贡献排名"
+          drawerTitle="月度之星完整榜单"
+          drawerDescription="查看当前统计范围内的签约金额和项目活跃度排行。"
+          objectType="project"
+          items={performers}
+          emptyText="暂无排行数据"
+          compactCount={3}
+          renderCompactItem={(p, i) => (
+            <div key={p.id} style={{
+              ...compactCardStyle,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              color: '#000',
-              fontSize: '12px',
-              fontWeight: 'bold',
+              gap: '12px',
+              background: i === 0 ? 'rgba(255, 215, 0, 0.1)' : i === 1 ? 'rgba(192, 192, 192, 0.1)' : i === 2 ? 'rgba(205, 127, 50, 0.1)' : compactCardStyle.background,
+              border: i === 0 ? '1px solid rgba(255, 215, 0, 0.3)' : i === 1 ? '1px solid rgba(192, 192, 192, 0.3)' : i === 2 ? '1px solid rgba(205, 127, 50, 0.3)' : compactCardStyle.border,
             }}>
-              {p.rank}
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: i === 0 ? 'linear-gradient(135deg, #FFD700, #FFA500)' : i === 1 ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)' : i === 2 ? 'linear-gradient(135deg, #CD7F32, #8B4513)' : techTheme.colors.primary,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#000',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                flexShrink: 0,
+              }}>
+                {p.rank}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: techTheme.text.primary, fontSize: '13px', fontWeight: '500', ...twoLineClampStyle }}>{p.name}</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '10px', marginTop: '3px' }}>{p.region}</div>
+              </div>
+              <div style={{ textAlign: 'right', minWidth: '72px', flexShrink: 0 }}>
+                <div style={{ color: i === 0 ? '#FFD700' : techTheme.colors.primary, fontSize: '14px', fontWeight: '600', wordBreak: 'break-word' }}>{p.score}</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{p.activities}个项目</div>
+              </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ color: techTheme.text.primary, fontSize: '13px', fontWeight: '500' }}>{p.name}</div>
-              <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{p.region}</div>
+          )}
+          renderDetailItem={(p, i) => (
+            <div key={p.id} style={detailCardStyle}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{i + 1}. {p.name}</div>
+                  <div style={{ color: techTheme.text.secondary, fontSize: '11px', marginTop: '4px' }}>{p.region}</div>
+                </div>
+                <div style={{ color: techTheme.colors.primary, fontSize: '13px', fontWeight: '700', textAlign: 'right' }}>{p.score}</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>签约金额</div>
+                <div style={{ color: '#E6F5FF', fontSize: '11px', textAlign: 'right' }}>{formatWan(p.amount)}</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>关联项目</div>
+                <div style={{ color: '#E6F5FF', fontSize: '11px', textAlign: 'right' }}>{p.activities} 个</div>
+              </div>
             </div>
-            <div style={{ textAlign: 'right', minWidth: '60px' }}>
-              <div style={{ color: i === 0 ? '#FFD700' : techTheme.colors.primary, fontSize: '14px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.score}</div>
-              <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{p.activities}个项目</div>
-            </div>
-          </div>
-        ))}
+          )}
+        />
       </div>
     );
   };
@@ -275,25 +515,44 @@ export function CustomersPanel({ data }: CustomersPanelProps) {
           <Users size={16} style={{ color: techTheme.colors.primary }} />
           <span style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '600' }}>重点客户</span>
         </div>
-        {customers.slice(0, 5).map((c, i) => (
-          <div key={c.id} style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '8px',
-            marginBottom: '4px',
-            borderBottom: i < 4 ? '1px solid rgba(0, 212, 255, 0.1)' : 'none',
-          }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ color: techTheme.text.primary, fontSize: '12px' }}>{c.name}</div>
-              <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{c.region || '未分配区域'}</div>
+        <ExpandablePanelSection
+          title="客户价值排名"
+          drawerTitle="重点客户完整榜单"
+          drawerDescription="查看当前统计周期内的客户价值、项目数量和区域分布。"
+          objectType="customer"
+          items={customers}
+          emptyText="暂无重点客户数据"
+          compactCount={3}
+          renderCompactItem={(c, i) => (
+            <div key={c.id} style={{ ...compactCardStyle, borderBottom: i < 2 ? '1px solid rgba(0, 212, 255, 0.1)' : compactCardStyle.border, display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: techTheme.text.primary, fontSize: '12px', ...twoLineClampStyle }}>{c.name}</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '10px', marginTop: '4px' }}>{c.region || '未分配区域'}</div>
+              </div>
+              <div style={{ textAlign: 'right', minWidth: '72px', flexShrink: 0 }}>
+                <div style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '600', wordBreak: 'break-word' }}>¥{(c.amount / 10000).toFixed(0)}万</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{c.projectCount}个项目</div>
+              </div>
             </div>
-            <div style={{ textAlign: 'right', minWidth: '60px' }}>
-              <div style={{ color: techTheme.colors.primary, fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>¥{(c.amount / 10000).toFixed(0)}万</div>
-              <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{c.projectCount}个项目</div>
+          )}
+          renderDetailItem={(c) => (
+            <div key={c.id} style={detailCardStyle}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{c.name}</div>
+                  <div style={{ color: techTheme.text.secondary, fontSize: '11px', marginTop: '4px' }}>{c.region || '未分配区域'} / {c.type}</div>
+                </div>
+                <div style={{ color: techTheme.colors.primary, fontSize: '13px', fontWeight: '700', textAlign: 'right' }}>¥{(c.amount / 10000).toFixed(1)}万</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>项目数量</div>
+                <div style={{ color: '#E6F5FF', fontSize: '11px', textAlign: 'right' }}>{c.projectCount} 个</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>合作年限</div>
+                <div style={{ color: '#E6F5FF', fontSize: '11px', textAlign: 'right' }}>{c.cooperationYears || 0} 年</div>
+              </div>
             </div>
-          </div>
-        ))}
+          )}
+        />
       </div>
     );
   };
@@ -400,31 +659,54 @@ export function ProjectsPanel({ data }: ProjectsPanelProps) {
           <FolderKanban size={16} style={{ color: techTheme.colors.primary }} />
           <span style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '600' }}>最近项目</span>
         </div>
-        {projects.slice(0, 5).map((p, i) => (
-          <div key={p.id} style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '8px',
-            marginBottom: '4px',
-            borderBottom: i < 4 ? '1px solid rgba(0, 212, 255, 0.1)' : 'none',
-          }}>
-            <div style={{
-              padding: '2px 6px',
-              background: p.stage === 'execution' ? 'rgba(0, 255, 136, 0.2)' : 'rgba(0, 212, 255, 0.2)',
-              borderRadius: '4px',
-              color: p.stage === 'execution' ? techTheme.colors.success : techTheme.colors.primary,
-              fontSize: '9px',
-            }}>
-              {stageLabels[p.stage] || p.stage}
+        <ExpandablePanelSection
+          title="最近更新项目"
+          drawerTitle="最近项目完整清单"
+          drawerDescription="查看当前项目阶段、客户和金额信息。"
+          objectType="project"
+          items={projects}
+          emptyText="暂无近期项目数据"
+          compactCount={3}
+          renderCompactItem={(p, i) => (
+            <div key={p.id} style={{ ...compactCardStyle, borderBottom: i < 2 ? '1px solid rgba(0, 212, 255, 0.1)' : compactCardStyle.border, display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{
+                padding: '2px 6px',
+                background: p.stage === 'execution' ? 'rgba(0, 255, 136, 0.2)' : 'rgba(0, 212, 255, 0.2)',
+                borderRadius: '4px',
+                color: p.stage === 'execution' ? techTheme.colors.success : techTheme.colors.primary,
+                fontSize: '9px',
+                flexShrink: 0,
+                marginTop: '2px',
+              }}>
+                {stageLabels[p.stage] || p.stage}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: techTheme.text.primary, fontSize: '12px', ...twoLineClampStyle }}>{p.name}</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '10px', marginTop: '4px', ...twoLineClampStyle }}>{p.customerName}</div>
+              </div>
+              <div style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '600', textAlign: 'right', minWidth: '74px', flexShrink: 0, wordBreak: 'break-word' }}>¥{(p.amount / 10000).toFixed(0)}万</div>
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ color: techTheme.text.primary, fontSize: '12px' }}>{p.name}</div>
-              <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{p.customerName}</div>
+          )}
+          renderDetailItem={(p) => (
+            <div key={p.id} style={detailCardStyle}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{p.name}</div>
+                  <div style={{ color: techTheme.text.secondary, fontSize: '11px', marginTop: '4px' }}>{p.customerName}</div>
+                </div>
+                <div style={{ color: techTheme.colors.primary, fontSize: '13px', fontWeight: '700', textAlign: 'right' }}>¥{(p.amount / 10000).toFixed(1)}万</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>当前阶段</div>
+                <div style={{ color: '#E6F5FF', fontSize: '11px', textAlign: 'right' }}>{stageLabels[p.stage] || p.stage}</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>项目状态</div>
+                <div style={{ color: '#E6F5FF', fontSize: '11px', textAlign: 'right' }}>{p.status}</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>最近更新时间</div>
+                <div style={{ color: '#E6F5FF', fontSize: '11px', textAlign: 'right' }}>{p.time}</div>
+              </div>
             </div>
-            <div style={{ color: techTheme.colors.primary, fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80px' }}>¥{(p.amount / 10000).toFixed(0)}万</div>
-          </div>
-        ))}
+          )}
+        />
       </div>
     );
   };
@@ -535,39 +817,59 @@ export function SolutionsPanel({ data }: SolutionsPanelProps) {
           <FileText size={16} style={{ color: techTheme.colors.primary }} />
           <span style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '600' }}>热门方案</span>
         </div>
-        {solutions.slice(0, 5).map((s, i) => (
-          <div key={s.id} style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '8px',
-            marginBottom: '4px',
-            borderBottom: i < 4 ? '1px solid rgba(0, 212, 255, 0.1)' : 'none',
-          }}>
-            <div style={{
-              width: '20px',
-              height: '20px',
-              borderRadius: '4px',
-              background: i === 0 ? 'linear-gradient(135deg, #FFD700, #FFA500)' : 'rgba(0, 212, 255, 0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: i === 0 ? '#000' : techTheme.colors.primary,
-              fontSize: '10px',
-              fontWeight: 'bold',
-            }}>
-              {s.rank}
+        <ExpandablePanelSection
+          title="浏览热度排名"
+          drawerTitle="热门方案完整榜单"
+          drawerDescription="查看方案的浏览热度、类型和当前状态。"
+          objectType="solution"
+          items={solutions}
+          emptyText="暂无热门方案数据"
+          compactCount={3}
+          renderCompactItem={(s, i) => (
+            <div key={s.id} style={{ ...compactCardStyle, display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{
+                width: '20px',
+                height: '20px',
+                borderRadius: '4px',
+                background: i === 0 ? 'linear-gradient(135deg, #FFD700, #FFA500)' : 'rgba(0, 212, 255, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: i === 0 ? '#000' : techTheme.colors.primary,
+                fontSize: '10px',
+                fontWeight: 'bold',
+                flexShrink: 0,
+              }}>
+                {s.rank}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: techTheme.text.primary, fontSize: '12px', ...twoLineClampStyle }}>{s.name}</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '10px', marginTop: '4px' }}>{s.type}</div>
+              </div>
+              <div style={{ textAlign: 'right', minWidth: '82px', flexShrink: 0 }}>
+                <div style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '600', wordBreak: 'break-word' }}>{s.viewCount}次浏览</div>
+                <div style={{ color: techTheme.colors.success, fontSize: '10px' }}>{s.status}</div>
+              </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ color: techTheme.text.primary, fontSize: '12px' }}>{s.name}</div>
-              <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{s.type}</div>
+          )}
+          renderDetailItem={(s, i) => (
+            <div key={s.id} style={detailCardStyle}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{i + 1}. {s.name}</div>
+                  <div style={{ color: techTheme.text.secondary, fontSize: '11px', marginTop: '4px' }}>{s.type}</div>
+                </div>
+                <div style={{ color: techTheme.colors.primary, fontSize: '13px', fontWeight: '700', textAlign: 'right' }}>{s.viewCount} 次</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>当前状态</div>
+                <div style={{ color: '#E6F5FF', fontSize: '11px', textAlign: 'right' }}>{s.status}</div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>浏览热度</div>
+                <div style={{ color: '#E6F5FF', fontSize: '11px', textAlign: 'right' }}>{s.viewCount} 次</div>
+              </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ color: techTheme.colors.primary, fontSize: '12px' }}>{s.viewCount}次浏览</div>
-              <div style={{ color: techTheme.colors.success, fontSize: '10px' }}>{s.status}</div>
-            </div>
-          </div>
-        ))}
+          )}
+        />
       </div>
     );
   };
@@ -849,6 +1151,13 @@ function getPersonalSourceLabel(source: string) {
 }
 
 export function PersonalFocusPanel({ summary, isLoading = false }: PersonalFocusPanelProps) {
+  const personalMetricItems = [
+    { label: '我的项目', value: summary.stats.myProjects, color: techTheme.colors.primary, testId: 'data-screen-personal-focus-my-projects' },
+    { label: '待办动作', value: summary.stats.pendingTodos, color: techTheme.colors.success, testId: 'data-screen-personal-focus-pending-todos' },
+    { label: '风险事项', value: summary.stats.pendingAlerts, color: '#FF8A65', testId: 'data-screen-personal-focus-pending-alerts' },
+    { label: '未读消息', value: summary.stats.unreadMessages, color: techTheme.colors.warning, testId: 'data-screen-personal-focus-unread-messages' },
+  ];
+
   return (
     <div data-testid="data-screen-personal-focus-panel" style={{
       background: 'rgba(255, 138, 101, 0.06)',
@@ -865,70 +1174,108 @@ export function PersonalFocusPanel({ summary, isLoading = false }: PersonalFocus
         <div style={{ color: techTheme.text.secondary, fontSize: '11px', textAlign: 'center', padding: '18px 0' }}>个人工作台摘要加载中...</div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '12px' }}>
-            {[
-              { label: '我的项目', value: summary.stats.myProjects, color: techTheme.colors.primary, testId: 'data-screen-personal-focus-my-projects' },
-              { label: '待办动作', value: summary.stats.pendingTodos, color: techTheme.colors.success, testId: 'data-screen-personal-focus-pending-todos' },
-              { label: '风险事项', value: summary.stats.pendingAlerts, color: '#FF8A65', testId: 'data-screen-personal-focus-pending-alerts' },
-              { label: '未读消息', value: summary.stats.unreadMessages, color: techTheme.colors.warning, testId: 'data-screen-personal-focus-unread-messages' },
-            ].map((item) => (
-              <div key={item.label} style={{ textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', padding: '8px 6px' }}>
-                <div data-testid={item.testId} style={{ color: item.color, fontSize: '15px', fontWeight: '600' }}>{item.value}</div>
-                <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{item.label}</div>
-              </div>
-            ))}
-          </div>
+          <FocusPreviewChart
+            title="个人事项压力"
+            variant="gauges"
+            emptyText="暂无个人事项数据"
+            items={personalMetricItems.map((item) => ({
+              label: item.label,
+              value: String(item.value),
+              ratio: Math.min(1, Number(item.value) / Math.max(1, Math.max(...personalMetricItems.map((metric) => Number(metric.value))))),
+              accentColor: item.color,
+            }))}
+          />
+
+          <FocusMetricGrid items={personalMetricItems} />
 
           <div style={{ marginBottom: '12px' }}>
-            <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', marginBottom: '8px' }}>今日优先队列</div>
-            {summary.focusQueue.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {summary.focusQueue.slice(0, 3).map((item) => (
-                  <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
-                    <div style={{ padding: '8px', borderRadius: '6px', background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</span>
-                        <span style={{ color: '#FF8A65', fontSize: '10px', whiteSpace: 'nowrap' }}>{getPersonalSourceLabel(item.source)}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '6px' }}>
-                        <span style={{ color: techTheme.text.secondary, fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.description || item.meta || '优先处理事项'}</span>
-                        <span style={{ color: techTheme.colors.warning, fontSize: '10px', whiteSpace: 'nowrap' }}>{getPersonalPriorityLabel(item.priority)}</span>
-                      </div>
+            <ExpandablePanelSection
+              title="今日优先队列"
+              drawerTitle="个人优先事项清单"
+              drawerDescription="查看当前需要优先推进的任务、待办和日程。"
+              objectType="personnel-item"
+              items={summary.focusQueue}
+              emptyText="当前没有需要优先推进的事项"
+              compactCount={2}
+              renderCompactItem={(item) => (
+                <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
+                  <div style={compactCardStyle}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                      <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', ...twoLineClampStyle }}>{item.title}</span>
+                      <span style={{ color: '#FF8A65', fontSize: '10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{getPersonalSourceLabel(item.source)}</span>
                     </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div style={{ color: techTheme.text.secondary, fontSize: '11px', textAlign: 'center', padding: '10px 0' }}>当前没有需要优先推进的事项</div>
-            )}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginTop: '6px' }}>
+                      <span style={{ color: techTheme.text.secondary, fontSize: '10px', ...twoLineClampStyle }}>{item.description || item.meta || '优先处理事项'}</span>
+                      <span style={{ color: techTheme.colors.warning, fontSize: '10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{getPersonalPriorityLabel(item.priority)}</span>
+                    </div>
+                  </div>
+                </Link>
+              )}
+              renderDetailItem={(item) => (
+                <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
+                  <div style={detailCardStyle}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{item.title}</div>
+                        <div style={{ color: techTheme.text.secondary, fontSize: '11px', marginTop: '4px' }}>{item.description || item.meta || '优先处理事项'}</div>
+                      </div>
+                      <div style={{ color: '#FF8A65', fontSize: '11px', fontWeight: '600', flexShrink: 0 }}>{getPersonalSourceLabel(item.source)}</div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', color: techTheme.text.secondary, fontSize: '11px' }}>
+                      <span>{getPersonalPriorityLabel(item.priority)}</span>
+                      <span>{item.meta || '立即查看详情'}</span>
+                    </div>
+                  </div>
+                </Link>
+              )}
+            />
           </div>
 
           <div>
-            <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', marginBottom: '8px' }}>我的重点项目</div>
-            {summary.starredProjects.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {summary.starredProjects.slice(0, 2).map((project) => (
-                  <Link key={project.id} href={`/projects/${project.id}`} style={{ textDecoration: 'none' }}>
-                    <div style={{ padding: '8px', borderRadius: '6px', background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.projectName}</span>
-                        <span style={{ color: techTheme.colors.primary, fontSize: '10px', whiteSpace: 'nowrap' }}>{project.progress}%</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '6px' }}>
-                        <span style={{ color: techTheme.text.secondary, fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.customerName || '未关联客户'}</span>
-                        <span style={{ color: techTheme.colors.success, fontSize: '10px', whiteSpace: 'nowrap' }}>{project.statusLabel || project.status}</span>
-                      </div>
+            <ExpandablePanelSection
+              title="我的重点项目"
+              drawerTitle="个人重点项目清单"
+              drawerDescription="查看当前重点项目的推进度、客户和状态。"
+              objectType="project"
+              items={summary.starredProjects}
+              emptyText="当前没有重点项目关注项"
+              compactCount={2}
+              renderCompactItem={(project) => (
+                <Link key={project.id} href={`/projects/${project.id}`} style={{ textDecoration: 'none' }}>
+                  <div style={compactCardStyle}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                      <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', ...twoLineClampStyle }}>{project.projectName}</span>
+                      <span style={{ color: techTheme.colors.primary, fontSize: '10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{project.progress}%</span>
                     </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div style={{ color: techTheme.text.secondary, fontSize: '11px', textAlign: 'center', padding: '10px 0' }}>当前没有重点项目关注项</div>
-            )}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginTop: '6px' }}>
+                      <span style={{ color: techTheme.text.secondary, fontSize: '10px', ...twoLineClampStyle }}>{project.customerName || '未关联客户'}</span>
+                      <span style={{ color: techTheme.colors.success, fontSize: '10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{project.statusLabel || project.status}</span>
+                    </div>
+                  </div>
+                </Link>
+              )}
+              renderDetailItem={(project) => (
+                <Link key={project.id} href={`/projects/${project.id}`} style={{ textDecoration: 'none' }}>
+                  <div style={detailCardStyle}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{project.projectName}</div>
+                        <div style={{ color: techTheme.text.secondary, fontSize: '11px', marginTop: '4px' }}>{project.customerName || '未关联客户'}</div>
+                      </div>
+                      <div style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '700', flexShrink: 0 }}>{project.progress}%</div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', color: techTheme.text.secondary, fontSize: '11px' }}>
+                      <span>{project.statusLabel || project.status}</span>
+                      <span>进入项目详情</span>
+                    </div>
+                  </div>
+                </Link>
+              )}
+            />
           </div>
 
           <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: techTheme.text.secondary, fontSize: '10px' }}>个人看板来自现有工作台读模型</span>
+            <span style={{ color: techTheme.text.secondary, fontSize: '10px', ...singleLineTextStyle }}>个人看板来自工作台读模型</span>
             <Link href="/workbench" data-testid="data-screen-personal-focus-open-workbench" style={cockpitLinkStyle}>
               打开工作台
             </Link>
@@ -971,6 +1318,12 @@ function getProjectStageLabel(stage: string) {
 
 export function PresalesFocusPanel({ summary, isLoading = false }: PresalesFocusPanelProps) {
   const missingWorklogRecordCount = summary.summary.missingWorklogRecordCount || 0;
+  const presalesMetricItems = [
+    { label: '支持工时', value: `${summary.summary.totalSupportHours.toFixed(1)}h`, color: '#FFB020', testId: 'data-screen-presales-total-hours' },
+    { label: '支撑项目', value: summary.summary.activeSupportProjects, color: techTheme.colors.primary, testId: 'data-screen-presales-active-projects' },
+    { label: '高负载人员', value: summary.summary.overloadedStaffCount, color: '#FF8A65', testId: 'data-screen-presales-overloaded-staff' },
+    { label: '复用覆盖率', value: `${summary.summary.solutionReuseCoverageRate}%`, color: techTheme.colors.success, testId: 'data-screen-presales-solution-reuse-rate' },
+  ];
 
   return (
     <div data-testid="data-screen-presales-focus-panel" style={{
@@ -1009,87 +1362,100 @@ export function PresalesFocusPanel({ summary, isLoading = false }: PresalesFocus
             </div>
           ) : null}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '12px' }}>
-            {[
-              { label: '支持工时', value: `${summary.summary.totalSupportHours.toFixed(1)}h`, color: '#FFB020', testId: 'data-screen-presales-total-hours' },
-              { label: '支撑项目', value: summary.summary.activeSupportProjects, color: techTheme.colors.primary, testId: 'data-screen-presales-active-projects' },
-              { label: '高负载人员', value: summary.summary.overloadedStaffCount, color: '#FF8A65', testId: 'data-screen-presales-overloaded-staff' },
-              { label: '复用覆盖率', value: `${summary.summary.solutionReuseCoverageRate}%`, color: techTheme.colors.success, testId: 'data-screen-presales-solution-reuse-rate' },
-            ].map((item) => (
-              <div key={item.label} style={{ textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', padding: '8px 6px' }}>
-                <div data-testid={item.testId} style={{ color: item.color, fontSize: '15px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.value}</div>
-                <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{item.label}</div>
-              </div>
-            ))}
+          <FocusPreviewChart
+            title="支撑类型节奏"
+            variant="columns"
+            emptyText="暂无支撑类型统计"
+            items={summary.serviceMix.slice(0, 4).map((item) => ({
+              label: getServiceCategoryLabel(item.category),
+              value: `${item.serviceCount} 次`,
+              ratio: Math.min(1, item.totalHours / Math.max(1, ...summary.serviceMix.map((entry) => entry.totalHours || 0))),
+              accentColor: '#FFB020',
+            }))}
+          />
+
+          <FocusMetricGrid items={presalesMetricItems} />
+
+          <div style={{ marginBottom: '12px' }}>
+            <ExpandablePanelSection
+              title="高负载售前"
+              drawerTitle="售前负载明细"
+              drawerDescription="查看高负载人员的工时、支撑项目和服务频次。"
+              objectType="project"
+              items={summary.topStaffLoad}
+              emptyText="当前时间范围内暂无售前支撑记录"
+              compactCount={2}
+              renderCompactItem={(item) => (
+                <div key={item.staffId} style={compactCardStyle}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', minWidth: 0, ...twoLineClampStyle }}>{item.name}</span>
+                    <span style={{ color: '#FFB020', fontSize: '10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{item.totalHours.toFixed(1)}h</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', color: techTheme.text.secondary, fontSize: '10px' }}>
+                    <span>{item.projectCount} 个项目</span>
+                    <span>{item.serviceCount} 次支撑</span>
+                  </div>
+                </div>
+              )}
+              renderDetailItem={(item) => (
+                <div key={item.staffId} style={detailCardStyle}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{item.name}</div>
+                      <div style={{ color: techTheme.text.secondary, fontSize: '11px', marginTop: '4px' }}>{item.projectCount} 个项目 / {item.serviceCount} 次支撑</div>
+                    </div>
+                    <div style={{ color: '#FFB020', fontSize: '12px', fontWeight: '700', flexShrink: 0 }}>{item.totalHours.toFixed(1)}h</div>
+                  </div>
+                </div>
+              )}
+            />
           </div>
 
           <div style={{ marginBottom: '12px' }}>
-            <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', marginBottom: '8px' }}>高负载售前</div>
-            {summary.topStaffLoad.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {summary.topStaffLoad.slice(0, 3).map((item) => (
-                  <div key={item.staffId} style={{ padding: '8px', borderRadius: '6px', background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600' }}>{item.name}</span>
-                      <span style={{ color: '#FFB020', fontSize: '10px' }}>{item.totalHours.toFixed(1)}h</span>
+            <ExpandablePanelSection
+              title="重点支撑项目"
+              drawerTitle="售前支撑项目清单"
+              drawerDescription="查看重点支撑项目的工时消耗、阶段和协同人数。"
+              objectType="project"
+              items={summary.keyProjects}
+              emptyText="暂无重点支撑项目"
+              compactCount={2}
+              renderCompactItem={(project) => (
+                <Link key={project.projectId} href={`/projects/${project.projectId}`} style={{ textDecoration: 'none' }}>
+                  <div style={compactCardStyle}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                      <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', minWidth: 0, ...twoLineClampStyle }}>{project.projectName}</span>
+                      <span style={{ color: techTheme.colors.primary, fontSize: '10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{project.supportHours.toFixed(1)}h</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', color: techTheme.text.secondary, fontSize: '10px' }}>
-                      <span>{item.projectCount} 个项目</span>
-                      <span>{item.serviceCount} 次支撑</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ color: techTheme.text.secondary, fontSize: '11px', textAlign: 'center', padding: '10px 0' }}>当前时间范围内暂无售前支撑记录</div>
-            )}
-          </div>
-
-          <div style={{ marginBottom: '12px' }}>
-            <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', marginBottom: '8px' }}>重点支撑项目</div>
-            {summary.keyProjects.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {summary.keyProjects.slice(0, 3).map((project) => (
-                  <Link key={project.projectId} href={`/projects/${project.projectId}`} style={{ textDecoration: 'none' }}>
-                    <div style={{ padding: '8px', borderRadius: '6px', background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.projectName}</span>
-                        <span style={{ color: techTheme.colors.primary, fontSize: '10px', whiteSpace: 'nowrap' }}>{project.supportHours.toFixed(1)}h</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', color: techTheme.text.secondary, fontSize: '10px' }}>
-                        <span>{project.region} / {getProjectStageLabel(project.stage)}</span>
-                        <span>{project.participantCount} 人协同</span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div>
-            <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', marginBottom: '8px' }}>支撑类型分布</div>
-            {summary.serviceMix.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {summary.serviceMix.slice(0, 4).map((item) => (
-                  <div key={item.category}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ color: techTheme.text.primary, fontSize: '11px' }}>{getServiceCategoryLabel(item.category)}</span>
-                      <span style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{item.serviceCount} 次 / {item.totalHours.toFixed(1)}h</span>
-                    </div>
-                    <div style={{ height: '6px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.min(item.totalHours * 6, 100)}%`, height: '100%', borderRadius: '999px', background: 'linear-gradient(90deg, rgba(255,176,32,0.5), rgba(255,138,101,0.85))' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', color: techTheme.text.secondary, fontSize: '10px', gap: '8px' }}>
+                      <span style={{ ...twoLineClampStyle }}>{project.region} / {getProjectStageLabel(project.stage)}</span>
+                      <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{project.participantCount} 人协同</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ color: techTheme.text.secondary, fontSize: '11px', textAlign: 'center', padding: '10px 0' }}>暂无支撑类型统计</div>
-            )}
+                </Link>
+              )}
+              renderDetailItem={(project) => (
+                <Link key={project.projectId} href={`/projects/${project.projectId}`} style={{ textDecoration: 'none' }}>
+                  <div style={detailCardStyle}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{project.projectName}</div>
+                        <div style={{ color: techTheme.text.secondary, fontSize: '11px', marginTop: '4px' }}>{project.region} / {getProjectStageLabel(project.stage)}</div>
+                      </div>
+                      <div style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '700', flexShrink: 0 }}>{project.supportHours.toFixed(1)}h</div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', color: techTheme.text.secondary, fontSize: '11px' }}>
+                      <span>{project.participantCount} 人协同</span>
+                      <span>打开项目详情</span>
+                    </div>
+                  </div>
+                </Link>
+              )}
+            />
           </div>
 
           <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: techTheme.text.secondary, fontSize: '10px' }}>当前口径按可见项目上的售前服务记录聚合，未填工时不会自动补算</span>
+            <span style={{ color: techTheme.text.secondary, fontSize: '10px', ...singleLineTextStyle }}>当前口径按可见项目上的售前服务记录聚合</span>
             <Link href="/staff" data-testid="data-screen-presales-open-staff" style={cockpitLinkStyle}>
               查看人员管理
             </Link>
@@ -1101,6 +1467,13 @@ export function PresalesFocusPanel({ summary, isLoading = false }: PresalesFocus
 }
 
 export function ManagementFocusPanel({ overviewMetrics, topRevenueRegions, forecastSummary, riskSummary, isLoading = false }: ManagementFocusPanelProps) {
+  const managementMetricItems = [
+    { label: '客户总数', value: overviewMetrics.totalCustomers, color: techTheme.colors.primary },
+    { label: '项目总数', value: overviewMetrics.totalProjects, color: techTheme.colors.success },
+    { label: '中标项目', value: overviewMetrics.wonProjects, color: techTheme.colors.warning },
+    { label: '覆盖率', value: `${forecastSummary?.coverageRate || 0}%`, color: (forecastSummary?.coverageRate || 0) >= 100 ? techTheme.colors.success : '#FF8A65' },
+  ];
+
   return (
     <div data-testid="data-screen-management-focus-panel" style={{
       background: 'rgba(0, 212, 255, 0.06)',
@@ -1117,47 +1490,60 @@ export function ManagementFocusPanel({ overviewMetrics, topRevenueRegions, forec
         <div style={{ color: techTheme.text.secondary, fontSize: '11px', textAlign: 'center', padding: '18px 0' }}>管理层视图加载中...</div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '12px' }}>
-            {[
-              { label: '客户总数', value: overviewMetrics.totalCustomers, color: techTheme.colors.primary },
-              { label: '项目总数', value: overviewMetrics.totalProjects, color: techTheme.colors.success },
-              { label: '中标项目', value: overviewMetrics.wonProjects, color: techTheme.colors.warning },
-              { label: '覆盖率', value: `${forecastSummary?.coverageRate || 0}%`, color: (forecastSummary?.coverageRate || 0) >= 100 ? techTheme.colors.success : '#FF8A65' },
-            ].map((item) => (
-              <div key={item.label} style={{ textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', padding: '8px 6px' }}>
-                <div style={{ color: item.color, fontSize: '15px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.value}</div>
-                <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{item.label}</div>
-              </div>
-            ))}
-          </div>
+          <FocusPreviewChart
+            title="区域金额格局"
+            variant="bars"
+            emptyText="暂无区域金额贡献数据"
+            items={topRevenueRegions.slice(0, 3).map((region) => ({
+              label: region.name,
+              value: formatWan(region.amount),
+              ratio: Math.min(1, region.amount / Math.max(1, ...topRevenueRegions.map((item) => item.amount || 0))),
+              accentColor: techTheme.colors.primary,
+            }))}
+          />
+
+          <FocusMetricGrid items={managementMetricItems} />
 
           <div style={{ padding: '8px', borderRadius: '6px', background: 'rgba(0,0,0,0.18)', marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: techTheme.text.secondary, fontSize: '10px', marginBottom: '4px' }}>
-              <span>经营收入基线</span>
-              <span>高风险 {riskSummary?.high || 0} / 总风险 {riskSummary?.total || 0}</span>
+              <span style={singleLineTextStyle}>经营收入基线</span>
+              <span style={singleLineTextStyle}>高风险 {riskSummary?.high || 0} / 总风险 {riskSummary?.total || 0}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-              <span style={{ color: techTheme.text.primary, fontSize: '13px', fontWeight: '600' }}>{formatWan(overviewMetrics.totalRevenue)}</span>
-              <span style={{ color: forecastSummary?.gapAmount ? '#FF8A65' : techTheme.colors.success, fontSize: '11px' }}>
+              <span style={{ color: techTheme.text.primary, fontSize: '13px', fontWeight: '600', ...singleLineTextStyle }}>{formatWan(overviewMetrics.totalRevenue)}</span>
+              <span style={{ color: forecastSummary?.gapAmount ? '#FF8A65' : techTheme.colors.success, fontSize: '11px', ...singleLineTextStyle }}>
                 {forecastSummary?.gapAmount ? `缺口 ${formatWan(forecastSummary.gapAmount)}` : '当前目标已覆盖'}
               </span>
             </div>
           </div>
 
-          <div>
-            <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', marginBottom: '8px' }}>区域金额贡献 TOP3</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {topRevenueRegions.slice(0, 3).map((region) => (
-                <div key={region.name} style={{ padding: '8px', borderRadius: '6px', background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600' }}>{region.name}</span>
-                    <span style={{ color: techTheme.colors.primary, fontSize: '10px' }}>{formatWan(region.amount)}</span>
-                  </div>
-                  <div style={{ color: techTheme.text.secondary, fontSize: '10px', marginTop: '6px' }}>热点值 {region.value}</div>
+          <ExpandablePanelSection
+            title="区域金额贡献"
+            drawerTitle="区域贡献完整榜单"
+            drawerDescription="查看各区域的金额贡献和热区值。"
+            objectType="region"
+            items={topRevenueRegions}
+            emptyText="暂无区域金额贡献数据"
+            compactCount={3}
+            renderCompactItem={(region) => (
+              <div key={region.name} style={compactCardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                  <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', minWidth: 0, ...twoLineClampStyle }}>{region.name}</span>
+                  <span style={{ color: techTheme.colors.primary, fontSize: '10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{formatWan(region.amount)}</span>
                 </div>
-              ))}
-            </div>
-          </div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '10px', marginTop: '6px' }}>热点值 {region.value}</div>
+              </div>
+            )}
+            renderDetailItem={(region) => (
+              <div key={region.name} style={detailCardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                  <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{region.name}</div>
+                  <div style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '700', flexShrink: 0 }}>{formatWan(region.amount)}</div>
+                </div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>热点值 {region.value}</div>
+              </div>
+            )}
+          />
         </>
       )}
     </div>
@@ -1167,6 +1553,12 @@ export function ManagementFocusPanel({ overviewMetrics, topRevenueRegions, forec
 export function BusinessFocusPanel({ funnel, topRegions, riskSummary, isLoading = false }: BusinessFocusPanelProps) {
   const hottestStage = [...(funnel?.stages || [])].sort((left, right) => right.amount - left.amount)[0];
   const missingWinProbabilityCount = funnel?.missingWinProbabilityCount || 0;
+  const businessMetricItems = [
+    { label: '在手机会', value: funnel?.totalOpenCount || 0, color: techTheme.colors.primary },
+    { label: '敞口金额', value: formatWan(funnel?.totalOpenAmount || 0), color: techTheme.colors.warning },
+    { label: '平均赢率', value: `${funnel?.avgWinProbability || 0}%`, color: techTheme.colors.success },
+    { label: '本周到期', value: riskSummary?.dueThisWeek || 0, color: '#FF8A65' },
+  ];
 
   return (
     <div data-testid="data-screen-business-focus-panel" style={{
@@ -1205,45 +1597,58 @@ export function BusinessFocusPanel({ funnel, topRegions, riskSummary, isLoading 
             </div>
           ) : null}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '12px' }}>
-            {[
-              { label: '在手机会', value: funnel?.totalOpenCount || 0, color: techTheme.colors.primary },
-              { label: '敞口金额', value: formatWan(funnel?.totalOpenAmount || 0), color: techTheme.colors.warning },
-              { label: '平均赢率', value: `${funnel?.avgWinProbability || 0}%`, color: techTheme.colors.success },
-              { label: '本周到期', value: riskSummary?.dueThisWeek || 0, color: '#FF8A65' },
-            ].map((item) => (
-              <div key={item.label} style={{ textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', padding: '8px 6px' }}>
-                <div style={{ color: item.color, fontSize: '15px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.value}</div>
-                <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{item.label}</div>
-              </div>
-            ))}
-          </div>
+          <FocusPreviewChart
+            title="阶段推进节奏"
+            variant="columns"
+            emptyText="暂无项目阶段数据"
+            items={(funnel?.stages || []).slice(0, 4).map((stage) => ({
+              label: stage.label,
+              value: `${stage.count} 项`,
+              ratio: Math.min(1, stage.count / Math.max(1, ...(funnel?.stages || []).map((entry) => entry.count || 0))),
+              accentColor: techTheme.colors.success,
+            }))}
+          />
+
+          <FocusMetricGrid items={businessMetricItems} />
 
           <div style={{ padding: '8px', borderRadius: '6px', background: 'rgba(0,0,0,0.18)', marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: techTheme.text.secondary, fontSize: '10px', marginBottom: '4px' }}>
-              <span>当前最大盘子阶段</span>
-              <span>行动逾期 {riskSummary?.overdueActions || 0}</span>
+              <span style={singleLineTextStyle}>当前最大盘子阶段</span>
+              <span style={singleLineTextStyle}>行动逾期 {riskSummary?.overdueActions || 0}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-              <span style={{ color: techTheme.text.primary, fontSize: '13px', fontWeight: '600' }}>{hottestStage?.label || '暂无数据'}</span>
-              <span style={{ color: techTheme.colors.success, fontSize: '11px' }}>{hottestStage ? formatWan(hottestStage.amount) : '-'}</span>
+              <span style={{ color: techTheme.text.primary, fontSize: '13px', fontWeight: '600', ...singleLineTextStyle }}>{hottestStage?.label || '暂无数据'}</span>
+              <span style={{ color: techTheme.colors.success, fontSize: '11px', ...singleLineTextStyle }}>{hottestStage ? formatWan(hottestStage.amount) : '-'}</span>
             </div>
           </div>
 
-          <div>
-            <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', marginBottom: '8px' }}>商机热区 TOP3</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {topRegions.slice(0, 3).map((region) => (
-                <div key={region.name} style={{ padding: '8px', borderRadius: '6px', background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600' }}>{region.name}</span>
-                    <span style={{ color: techTheme.colors.primary, fontSize: '10px' }}>{formatWan(region.amount)}</span>
-                  </div>
-                  <div style={{ color: techTheme.text.secondary, fontSize: '10px', marginTop: '6px' }}>热点值 {region.value}</div>
+          <ExpandablePanelSection
+            title="商机热区"
+            drawerTitle="商机热区完整榜单"
+            drawerDescription="查看各区域的商机热度和金额规模。"
+            objectType="region"
+            items={topRegions}
+            emptyText="暂无商机热区数据"
+            compactCount={3}
+            renderCompactItem={(region) => (
+              <div key={region.name} style={compactCardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                  <span style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', minWidth: 0, ...twoLineClampStyle }}>{region.name}</span>
+                  <span style={{ color: techTheme.colors.primary, fontSize: '10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{formatWan(region.amount)}</span>
                 </div>
-              ))}
-            </div>
-          </div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '10px', marginTop: '6px' }}>热点值 {region.value}</div>
+              </div>
+            )}
+            renderDetailItem={(region) => (
+              <div key={region.name} style={detailCardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                  <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{region.name}</div>
+                  <div style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '700', flexShrink: 0 }}>{formatWan(region.amount)}</div>
+                </div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>热点值 {region.value}</div>
+              </div>
+            )}
+          />
         </>
       )}
     </div>
@@ -1284,19 +1689,38 @@ export function FunnelSummaryPanel({ funnel, isLoading = false }: FunnelSummaryP
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {(funnel?.stages || []).map((stage) => (
-              <div key={stage.key}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ color: techTheme.text.primary, fontSize: '11px' }}>{stage.label}</span>
-                  <span style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{stage.count}项 / {formatWan(stage.amount)}</span>
+          <ExpandablePanelSection
+            title="阶段拆解"
+            drawerTitle="经营漏斗阶段明细"
+            drawerDescription="查看漏斗各阶段的项目数量、金额和相对占比。"
+            objectType="project"
+            items={funnel?.stages || []}
+            emptyText="暂无漏斗阶段数据"
+            compactCount={3}
+            renderCompactItem={(stage) => (
+              <div key={stage.key} style={compactCardStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+                  <span style={{ color: techTheme.text.primary, fontSize: '11px', minWidth: 0, ...twoLineClampStyle }}>{stage.label}</span>
+                  <span style={{ color: techTheme.text.secondary, fontSize: '10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{stage.count}项 / {formatWan(stage.amount)}</span>
                 </div>
                 <div style={{ height: '6px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
                   <div style={{ width: `${(stage.count / maxCount) * 100}%`, height: '100%', borderRadius: '999px', background: 'linear-gradient(90deg, rgba(0,212,255,0.5), rgba(0,255,136,0.85))' }} />
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+            renderDetailItem={(stage) => (
+              <div key={stage.key} style={detailCardStyle}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                  <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{stage.label}</div>
+                  <div style={{ color: techTheme.colors.primary, fontSize: '12px', fontWeight: '700', flexShrink: 0 }}>{stage.count}项</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', color: techTheme.text.secondary, fontSize: '11px' }}>
+                  <span>阶段金额 {formatWan(stage.amount)}</span>
+                  <span>加权 {formatWan(stage.weightedAmount)}</span>
+                </div>
+              </div>
+            )}
+          />
 
           <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ color: techTheme.text.secondary, fontSize: '10px' }}>加权合同池</span>
@@ -1348,39 +1772,61 @@ export function RiskSummaryPanel({ riskSummary, isLoading = false }: RiskSummary
             ))}
           </div>
 
-          {(riskSummary?.items.length || 0) > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {riskSummary?.items.map((item) => (
-                <div key={item.projectId} style={{ padding: '8px', borderRadius: '6px', background: 'rgba(0,0,0,0.22)', border: `1px solid ${item.riskLevel === 'high' ? 'rgba(255,138,101,0.28)' : 'rgba(251,191,36,0.22)'}` }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.projectName}</div>
-                      <div style={{ color: techTheme.text.secondary, fontSize: '10px' }}>{item.region} / {item.stage}</div>
-                    </div>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: item.riskLevel === 'high' ? '#FF8A65' : '#FBBF24', fontSize: '10px', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                      <AlertTriangle size={11} />
-                      {item.riskLevel === 'high' ? '高风险' : '需关注'}
-                    </div>
+          <ExpandablePanelSection
+            title="重点风险对象"
+            drawerTitle="风险对象完整清单"
+            drawerDescription="查看全部高风险与需关注项目，并进入项目或任务中心处理。"
+            objectType="risk"
+            items={riskSummary?.items || []}
+            emptyText="暂无高优先级风险"
+            compactCount={2}
+            actions={[{ label: '打开任务中心', href: '/tasks?scope=mine&type=alert' }]}
+            renderCompactItem={(item) => (
+              <div key={item.projectId} style={{ ...compactCardStyle, border: `1px solid ${item.riskLevel === 'high' ? 'rgba(255,138,101,0.28)' : 'rgba(251,191,36,0.22)'}` }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: techTheme.text.primary, fontSize: '11px', fontWeight: '600', ...twoLineClampStyle }}>{item.projectName}</div>
+                    <div style={{ color: techTheme.text.secondary, fontSize: '10px', marginTop: '4px' }}>{item.region} / {item.stage}</div>
                   </div>
-                  <div style={{ color: techTheme.text.secondary, fontSize: '10px', marginBottom: '6px' }}>{item.reason}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: techTheme.text.secondary, fontSize: '10px' }}>
-                    <span>赢率 {item.winProbability}%</span>
-                    <span>{formatWan(item.amount)}</span>
-                  </div>
-                  <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Link href={`/projects/${item.projectId}`} data-testid={`data-screen-risk-project-link-${item.projectId}`} style={cockpitLinkStyle}>
-                      查看项目
-                    </Link>
-                    <Link href="/tasks?scope=mine&type=alert" style={cockpitLinkStyle}>
-                      去任务中心
-                    </Link>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: item.riskLevel === 'high' ? '#FF8A65' : '#FBBF24', fontSize: '10px', fontWeight: '600', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    <AlertTriangle size={11} />
+                    {item.riskLevel === 'high' ? '高风险' : '需关注'}
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ color: techTheme.text.secondary, fontSize: '11px', textAlign: 'center', padding: '12px 0' }}>暂无高优先级风险</div>
-          )}
+                <div style={{ color: techTheme.text.secondary, fontSize: '10px', ...twoLineClampStyle }}>{item.reason}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: techTheme.text.secondary, fontSize: '10px', marginTop: '6px' }}>
+                  <span>赢率 {item.winProbability}%</span>
+                  <span>{formatWan(item.amount)}</span>
+                </div>
+              </div>
+            )}
+            renderDetailItem={(item) => (
+              <div key={item.projectId} style={{ ...detailCardStyle, border: `1px solid ${item.riskLevel === 'high' ? 'rgba(255,138,101,0.28)' : 'rgba(251,191,36,0.22)'}` }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: techTheme.text.primary, fontSize: '14px', fontWeight: '700' }}>{item.projectName}</div>
+                    <div style={{ color: techTheme.text.secondary, fontSize: '11px', marginTop: '4px' }}>{item.region} / {item.stage}</div>
+                  </div>
+                  <div style={{ color: item.riskLevel === 'high' ? '#FF8A65' : '#FBBF24', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>
+                    {item.riskLevel === 'high' ? '高风险' : '需关注'}
+                  </div>
+                </div>
+                <div style={{ color: techTheme.text.secondary, fontSize: '11px' }}>{item.reason}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', color: techTheme.text.secondary, fontSize: '11px' }}>
+                  <span>赢率 {item.winProbability}%</span>
+                  <span>{formatWan(item.amount)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                  <Link href={`/projects/${item.projectId}`} data-testid={`data-screen-risk-project-link-${item.projectId}`} style={cockpitLinkStyle}>
+                    查看项目
+                  </Link>
+                  <Link href="/tasks?scope=mine&type=alert" style={cockpitLinkStyle}>
+                    去任务中心
+                  </Link>
+                </div>
+              </div>
+            )}
+          />
 
           <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', color: techTheme.text.secondary, fontSize: '10px' }}>
             <span>中风险 {riskSummary?.medium || 0}</span>

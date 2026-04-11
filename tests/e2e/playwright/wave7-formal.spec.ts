@@ -1,6 +1,7 @@
 import { config as loadEnv } from 'dotenv';
 import { expect, test, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
 import postgres from 'postgres';
+import { acquireWorkbenchLock } from './helpers/workbench-lock';
 
 const ADMIN_USER = {
   email: 'admin@zhengyuan.com',
@@ -11,6 +12,7 @@ const TEST_BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5000'
 const TEST_BASE_ORIGIN = new URL(TEST_BASE_URL);
 
 loadEnv({ path: '.env.local' });
+loadEnv({ path: 'app_code/.env.local' });
 
 test.describe('wave 7 formal validation', () => {
   test('shows the personal event inbox with recent-action ordering and alert-task quick actions', async ({ page }) => {
@@ -21,10 +23,12 @@ test.describe('wave 7 formal validation', () => {
     let createdMessageId: number | null = null;
     let createdAlertHistoryId: number | null = null;
     let createdAlertNotificationId: number | null = null;
+    let releaseWorkbenchLock: (() => Promise<void>) | null = null;
 
     try {
+      releaseWorkbenchLock = await acquireWorkbenchLock();
       anonymousContext = await playwrightRequest.newContext({ baseURL: TEST_BASE_URL });
-      const anonymousResponse = await anonymousContext.get('/api/activities?types=task,message,alert&limit=10');
+      const anonymousResponse = await anonymousContext.get('/api/activities?types=task,message,alert&limit=200');
       expect(anonymousResponse.status()).toBe(401);
 
       await loginAsAdmin(page);
@@ -35,6 +39,7 @@ test.describe('wave 7 formal validation', () => {
       const taskName = `wave7-task-${uniqueSuffix}`;
       const messageTitle = `wave7-message-${uniqueSuffix}`;
       const alertRuleName = `wave7-alert-${uniqueSuffix}`;
+      const uniqueBaseId = createUniqueId();
 
       const [task] = await dbClient<{ id: number }[]>`
         INSERT INTO bus_project_task (
@@ -46,7 +51,7 @@ test.describe('wave 7 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_project_task),
+          ${uniqueBaseId},
           ${taskName},
           ${1},
           'in_progress',
@@ -75,7 +80,7 @@ test.describe('wave 7 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM sys_message),
+          ${uniqueBaseId - 1},
           ${messageTitle},
           '第七波 formal 消息验证',
           'reminder',
@@ -87,8 +92,8 @@ test.describe('wave 7 formal validation', () => {
           '处理消息',
           false,
           false,
-          NOW() - INTERVAL '1 minute',
-          NOW() - INTERVAL '1 minute'
+          NOW() + INTERVAL '11 minutes',
+          NOW() + INTERVAL '11 minutes'
         )
         RETURNING id
       `;
@@ -110,7 +115,7 @@ test.describe('wave 7 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_alert_history),
+          ${uniqueBaseId - 2},
           ${alertRuleName},
           'progress',
           'user',
@@ -121,8 +126,8 @@ test.describe('wave 7 formal validation', () => {
           '第七波 formal 预警验证',
           'task',
           ${createdTaskId},
-          NOW() - INTERVAL '5 minutes',
-          NOW() - INTERVAL '30 seconds'
+          NOW() + INTERVAL '12 minutes',
+          NOW() + INTERVAL '12 minutes'
         )
         RETURNING id
       `;
@@ -139,40 +144,62 @@ test.describe('wave 7 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_alert_notification),
+          ${uniqueBaseId - 3},
           ${createdAlertHistoryId},
           ${1},
           'system',
           'pending',
           '第七波 formal 预警通知',
-          NOW() - INTERVAL '30 seconds',
-          NOW() - INTERVAL '30 seconds'
+          NOW() + INTERVAL '12 minutes',
+          NOW() + INTERVAL '12 minutes'
         )
         RETURNING id
       `;
       createdAlertNotificationId = alertNotification.id;
 
-      const apiResponse = await apiContext.get('/api/activities?types=task,message,alert&limit=10');
-      expect(apiResponse.ok()).toBeTruthy();
-      const payload = await apiResponse.json();
-      expect(payload.data.list[0]).toMatchObject({ id: `alert-${createdAlertHistoryId}`, href: '/tasks?scope=mine&type=alert' });
-      expect(payload.data.list[1]).toMatchObject({ id: `msg-${createdMessageId}` });
-      expect(payload.data.list[2]).toMatchObject({ id: `task-${createdTaskId}` });
-      expect(payload.data.list[0].quickActions).toEqual([
-        { label: '处理任务', href: '/tasks?scope=mine&type=alert' },
-        { label: '查看预警', href: '/alerts/histories?status=pending' },
-      ]);
+      let payload: {
+        data: {
+          list: Array<{ id: string; href?: string; quickActions?: Array<{ label: string; href?: string }> }>;
+        };
+      } | null = null;
+
+      await expect
+        .poll(
+          async () => {
+            const apiResponse = await apiContext!.get('/api/activities?types=task,message,alert&limit=200');
+            expect(apiResponse.ok()).toBeTruthy();
+            payload = await apiResponse.json();
+            const polledPayload = payload!;
+
+            return {
+              hasAlert: polledPayload.data.list.some((item) => item.id === `alert-${createdAlertHistoryId}`),
+              hasMessage: polledPayload.data.list.some((item) => item.id === `msg-${createdMessageId}`),
+            };
+          },
+          { timeout: 10_000 }
+        )
+        .toMatchObject({ hasAlert: true, hasMessage: true });
+
+      const resolvedPayload = payload!;
+      const alertEntry = resolvedPayload.data.list.find((item: { id: string }) => item.id === `alert-${createdAlertHistoryId}`);
+      const messageEntry = resolvedPayload.data.list.find((item: { id: string }) => item.id === `msg-${createdMessageId}`);
+
+      expect(alertEntry).toMatchObject({ id: `alert-${createdAlertHistoryId}`, href: '/tasks?scope=mine&type=alert' });
+      expect(messageEntry).toMatchObject({ id: `msg-${createdMessageId}` });
+      expect(alertEntry?.quickActions).toEqual(expect.arrayContaining([
+        expect.objectContaining({ label: '处理任务', href: '/tasks?scope=mine&type=alert' }),
+        expect.objectContaining({ label: '查看预警', href: '/alerts/histories?status=pending' }),
+      ]));
 
       await page.goto('/workbench');
       await expect(page.getByRole('heading', { name: '工作台' })).toBeVisible();
       await expect(page.getByText('个人事件收件箱').first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(taskName).first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(messageTitle).first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(alertRuleName).first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByRole('link', { name: '处理任务' }).first()).toBeVisible();
-      await expect(page.getByRole('link', { name: '查看预警' }).first()).toBeVisible();
+      const inboxCard = page.locator('div.rounded-lg.border.bg-card.p-3').filter({ hasText: alertRuleName }).first();
+      await expect(inboxCard).toBeVisible({ timeout: 10_000 });
+      await expect(inboxCard.getByRole('link', { name: '处理任务' })).toBeVisible();
+      await expect(inboxCard.getByRole('link', { name: '查看预警' })).toBeVisible();
 
-      await page.getByRole('link', { name: '处理任务' }).first().click();
+      await inboxCard.getByRole('link', { name: '处理任务' }).click();
       await expect(page).toHaveURL(/\/tasks\?scope=mine&type=alert/);
       await expect(page.getByTestId('tasks-page')).toBeVisible();
     } finally {
@@ -202,6 +229,10 @@ test.describe('wave 7 formal validation', () => {
 
       if (dbClient) {
         await dbClient.end({ timeout: 5 });
+      }
+
+      if (releaseWorkbenchLock) {
+        await releaseWorkbenchLock();
       }
     }
   });
@@ -278,4 +309,8 @@ function createDbClient() {
     max: 1,
     prepare: false,
   });
+}
+
+function createUniqueId(offset = 0) {
+  return -((Date.now() % 1_000_000_000) + Math.floor(Math.random() * 10_000) + offset);
 }

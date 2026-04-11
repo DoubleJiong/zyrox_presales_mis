@@ -40,6 +40,7 @@ import {
   Archive,
   Info,
   ClipboardList,
+  Wrench,
 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -58,13 +59,13 @@ import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useFileUpload } from '@/hooks/use-file-upload';
-import { ProjectBidding } from '@/components/project/project-bidding';
 import { ProjectStageProgress } from '@/components/project-stage-progress';
 import { PROJECT_STAGES } from '@/components/project-stage-progress';
 import { ProjectInfoTab } from '@/components/project/project-info-tab';
 import { ProjectPlanningTab } from '@/components/project/project-planning-tab';
 import { ProjectBiddingTab } from '@/components/project/project-bidding-tab';
 import { ProjectSettlement } from '@/components/project/project-settlement';
+import { ProjectImplementationPlan } from '@/components/project/project-implementation-plan';
 import { ProjectArchive } from '@/components/project/project-archive';
 import { ProjectOverviewCard } from '@/components/project/project-overview-card';
 import {
@@ -92,6 +93,7 @@ import {
   canAccessBiddingTab, 
   canAccessResultTab,
   canAccessSettlementTab,
+  canAccessImplementationPlanTab,
   isProjectReadOnly 
 } from '@/lib/utils/stage-transitions';
 import { 
@@ -101,6 +103,7 @@ import {
   getStageLabel,
   Priority
 } from '@/lib/utils/project-colors';
+import { getProjectTypeDisplayLabel, getProjectTypeOaCategoryLabel, normalizeProjectTypeCodes } from '@/lib/project-type-codec';
 
 interface Project {
   id: number;
@@ -109,6 +112,7 @@ interface Project {
   customerId: number | null;
   customerName: string;
   projectType: string;
+  projectTypes?: string[];
   industry: string | null;
   region: string | null;
   description: string | null;
@@ -529,15 +533,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     return colorMap[priority] || 'bg-gray-100 text-gray-700';
   };
 
-  const getTypeBadge = (type: string) => {
-    const typeMap: Record<string, string> = {
-      software: '软件',
-      integration: '集成',
-      consulting: '咨询',
-      maintenance: '维护',
-      other: '其他'
-    };
-    return typeMap[type] || type;
+  const getTypeBadge = (type: string, types?: string[]) => {
+    const codes = normalizeProjectTypeCodes(types ?? type);
+    if (codes.length === 0) {
+      return <span className="text-muted-foreground">未设置</span>;
+    }
+
+    return (
+      <div className="flex flex-wrap gap-1">
+        {codes.map((code) => (
+          <Badge key={code} variant="outline">
+            {getProjectTypeDisplayLabel(code)} / {getProjectTypeOaCategoryLabel(code)}
+          </Badge>
+        ))}
+      </div>
+    );
   };
 
   const formatCurrency = (amount: string | null) => {
@@ -640,6 +650,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const canAccessSettlement = () => {
     return canAccessSettlementTab((project?.projectStage || 'opportunity') as ProjectStage);
+  };
+
+  const canAccessImplementationPlan = () => {
+    return canAccessImplementationPlanTab((project?.projectStage || 'opportunity') as ProjectStage);
   };
   
   // 判断项目是否只读
@@ -849,6 +863,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const workflowReadOnly = stageReadOnly || permissionReadOnly;
   const archiveReadOnly = project.projectStage === 'cancelled' || permissionReadOnly;
   const settlementReadOnly = permissionReadOnly || project.projectStage === 'cancelled' || project.projectStage === 'archived';
+  const implementationReadOnly = permissionReadOnly || project.projectStage === 'cancelled' || project.projectStage === 'archived';
   const canManageMembers = !stageReadOnly && !permissionReadOnly && !!project.permissions?.canAdmin;
 
   const filteredUsers = availableUsers.filter(user =>
@@ -911,7 +926,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       {/* 主内容区 */}
       <div className="container mx-auto px-4 py-6">
         <Tabs defaultValue="basic" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-grid">
             <TabsTrigger 
               value="basic" 
               className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm"
@@ -944,6 +959,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             >
               <Archive className="h-4 w-4" />
               中标/丢标
+            </TabsTrigger>
+            <TabsTrigger 
+              value="implementation"
+              className="flex items-center gap-2 data-[disabled]:opacity-50"
+              disabled={!canAccessImplementationPlan()}
+              title={!canAccessImplementationPlan() ? '项目进入「交付准备中」阶段后才可访问' : ''}
+            >
+              <Wrench className="h-4 w-4" />
+              实施方案
             </TabsTrigger>
             <TabsTrigger 
               value="financials" 
@@ -980,7 +1004,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   </div>
                   <div className="space-y-1">
                     <Label className="text-muted-foreground">项目类型</Label>
-                    <p className="font-medium">{getTypeBadge(project.projectType)}</p>
+                    <div className="font-medium">{getTypeBadge(project.projectType, project.projectTypes)}</div>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-muted-foreground">客户类型/行业</Label>
@@ -1232,13 +1256,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
           {/* 招投标 Tab */}
           <TabsContent value="bidding">
-            <ProjectBidding projectId={project.id} />
             <ProjectBiddingTab projectId={project.id} readOnly={workflowReadOnly} canManageMembers={canManageMembers} />
           </TabsContent>
 
           {/* 中标/丢标 Tab */}
           <TabsContent value="settlement">
             <ProjectArchive projectId={project.id} readOnly={archiveReadOnly} />
+          </TabsContent>
+
+          {/* 实施方案 Tab */}
+          <TabsContent value="implementation">
+            <ProjectImplementationPlan projectId={project.id} readOnly={implementationReadOnly} />
           </TabsContent>
 
           {/* 结算信息 Tab */}

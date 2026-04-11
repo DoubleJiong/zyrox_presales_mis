@@ -54,7 +54,7 @@ const PROJECT_STAGE_LABELS: Record<string, string> = {
   opportunity: '商机阶段',
   bidding_pending: '投标立项待审批',
   bidding: '招标投标',
-  solution_review: '方案评审中',
+  solution_review: '投标评标',
   contract_pending: '合同/商务确认中',
   delivery_preparing: '执行准备中',
   delivering: '执行中',

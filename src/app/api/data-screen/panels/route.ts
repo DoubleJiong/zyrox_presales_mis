@@ -7,41 +7,123 @@ import {
 import { count, sum, sql, desc, and, gte, lte, eq, isNull } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
+import { PERMISSIONS } from '@/lib/permissions';
 import { aggregateProjectLifecycleRows } from '@/lib/project-reporting';
 import { getProjectDisplayStatusLabel } from '@/lib/project-display';
+
+type PanelType = 'sales' | 'customers' | 'projects' | 'solutions';
 
 export const GET = withAuth(async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
-    const panelType = searchParams.get('type') || 'sales';
+    const panelType = resolvePanelType(searchParams.get('type'));
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    let panelData: any;
-
-    switch (panelType) {
-      case 'sales':
-        panelData = await getSalesPanelData(startDate, endDate);
-        break;
-      case 'customers':
-        panelData = await getCustomersPanelData(startDate, endDate);
-        break;
-      case 'projects':
-        panelData = await getProjectsPanelData(startDate, endDate);
-        break;
-      case 'solutions':
-        panelData = await getSolutionsPanelData(startDate, endDate);
-        break;
-      default:
-        panelData = await getSalesPanelData(startDate, endDate);
-    }
+    const panelData = await getPanelDataSafely(panelType, startDate, endDate);
 
     return successResponse(panelData);
   } catch (error) {
     console.error('Panel data API error:', error);
     return errorResponse('INTERNAL_ERROR', '获取面板数据失败');
   }
+}, {
+  requiredPermissions: [PERMISSIONS.DATASCREEN_VIEW],
 });
+
+function resolvePanelType(value: string | null): PanelType {
+  switch (value) {
+    case 'customers':
+    case 'projects':
+    case 'solutions':
+      return value;
+    default:
+      return 'sales';
+  }
+}
+
+async function getPanelDataSafely(panelType: PanelType, startDate?: string | null, endDate?: string | null) {
+  try {
+    switch (panelType) {
+      case 'customers':
+        return await getCustomersPanelData(startDate, endDate);
+      case 'projects':
+        return await getProjectsPanelData(startDate, endDate);
+      case 'solutions':
+        return await getSolutionsPanelData(startDate, endDate);
+      case 'sales':
+      default:
+        return await getSalesPanelData(startDate, endDate);
+    }
+  } catch (error) {
+    console.warn(`[data-screen/panels] fallback to empty payload for ${panelType}`, error);
+    return buildEmptyPanelData(panelType);
+  }
+}
+
+function buildEmptyPanelData(panelType: PanelType) {
+  switch (panelType) {
+    case 'customers':
+      return {
+        topCustomers: [],
+        typeDistribution: [],
+        regionDistribution: [],
+        recentActive: [],
+        lifecycleDistribution: [],
+        growthTrends: [],
+        summary: {
+          totalCustomers: 0,
+          totalAmount: 0,
+          avgProjectCount: '0',
+        },
+      };
+    case 'projects':
+      return {
+        statusDistribution: [],
+        stageDistribution: [],
+        typeDistribution: [],
+        regionDistribution: [],
+        bidResultDistribution: [],
+        recentProjects: [],
+        funnelData: [],
+        projectTrends: [],
+        summary: {
+          totalProjects: 0,
+          totalAmount: 0,
+          wonCount: 0,
+          winRate: 0,
+        },
+      };
+    case 'solutions':
+      return {
+        typeDistribution: [],
+        statusDistribution: [],
+        topSolutions: [],
+        recentUpdates: [],
+        summary: {
+          totalSolutions: 0,
+          publishedCount: 0,
+          totalViews: 0,
+        },
+      };
+    case 'sales':
+    default:
+      return {
+        topPerformers: [],
+        workSaturation: [],
+        regionDistribution: [],
+        stageDistribution: [],
+        opportunityStages: [],
+        conversionRate: 0,
+        monthlyTrends: [],
+        summary: {
+          totalActivities: 0,
+          avgConversionRate: 0,
+          totalAmount: 0,
+        },
+      };
+  }
+}
 
 // 售前数据面板
 async function getSalesPanelData(startDate?: string | null, endDate?: string | null) {

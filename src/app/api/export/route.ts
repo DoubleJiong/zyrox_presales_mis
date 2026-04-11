@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { customers, projects, users, todos, schedules } from '@/db/schema';
+import { customers, projects, users, todos, schedules, projectTypes } from '@/db/schema';
 import { isNull, eq, and, gte, lte, between, sql } from 'drizzle-orm';
 import * as XLSX from 'xlsx';
 import {
@@ -8,6 +8,7 @@ import {
   getProjectStageLabel,
   getProjectStatusLabel,
 } from '@/lib/project-field-mappings';
+import { getProjectTypeDisplayLabel } from '@/lib/project-type-codec';
 
 /**
  * 通用数据导出 API
@@ -90,13 +91,15 @@ async function getProjectsData(startDate?: string, endDate?: string) {
       项目编号: projects.projectCode,
       项目名称: projects.projectName,
       客户名称: projects.customerName,
+      项目类型: projectTypes.name,
+      项目类型代码: projects.projectType,
       项目阶段: projects.projectStage,
-      客户类型或行业: projects.industry,
+      '客户类型/行业': projects.industry,
       区域: projects.region,
       项目状态: projects.status,
       优先级: projects.priority,
       进度: projects.progress,
-      预估金额: projects.estimatedAmount,
+      '预计金额': projects.estimatedAmount,
       实际金额: projects.actualAmount,
       合同金额: projects.contractAmount,
       开始日期: projects.startDate,
@@ -107,20 +110,29 @@ async function getProjectsData(startDate?: string, endDate?: string) {
       更新时间: projects.updatedAt,
     })
     .from(projects)
+    .leftJoin(projectTypes, eq(projects.projectTypeId, projectTypes.id))
     .where(and(...conditions));
 
   return results.map(r => ({
-    ...r,
+    项目编号: r.项目编号,
+    项目名称: r.项目名称,
+    客户名称: r.客户名称,
+    项目类型: r.项目类型 || (r.项目类型代码
+      ? r.项目类型代码.split(',').map((c: string) => getProjectTypeDisplayLabel(c.trim())).join('/')
+      : ''),
     项目阶段: getProjectStageLabel(r.项目阶段),
-    客户类型或行业: getProjectCustomerTypeOrIndustryLabel(r.客户类型或行业),
+    '客户类型/行业': getProjectCustomerTypeOrIndustryLabel(r['客户类型/行业']),
+    区域: r.区域,
     项目状态: getProjectStatusLabel(r.项目状态),
     优先级: r.优先级 === 'urgent' ? '紧急' : r.优先级 === 'high' ? '高' : r.优先级 === 'medium' ? '中' : '低',
     进度: `${r.进度}%`,
-    预估金额: r.预估金额 ? `¥${Number(r.预估金额).toLocaleString()}` : '',
+    '预计金额': r['预计金额'] ? `¥${Number(r['预计金额']).toLocaleString()}` : '',
     实际金额: r.实际金额 ? `¥${Number(r.实际金额).toLocaleString()}` : '',
     合同金额: r.合同金额 ? `¥${Number(r.合同金额).toLocaleString()}` : '',
     开始日期: r.开始日期 || '',
     结束日期: r.结束日期 || '',
+    描述: r.描述,
+    风险说明: r.风险说明,
     创建时间: r.创建时间 ? new Date(r.创建时间).toLocaleString('zh-CN') : '',
     更新时间: r.更新时间 ? new Date(r.更新时间).toLocaleString('zh-CN') : '',
   }));

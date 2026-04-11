@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
         updatedAt: projects.updatedAt,
         // 投标详情
         biddingId: projectBiddings.id,
+        biddingMethod: projectBiddings.biddingMethod,
         biddingType: projectBiddings.biddingType,
         bidDeadline: projectBiddings.bidDeadline,
         bidBondAmount: projectBiddings.bidBondAmount,

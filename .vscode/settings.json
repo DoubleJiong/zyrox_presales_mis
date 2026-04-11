@@ -1,0 +1,44 @@
+{
+  "typescript.tsserver.maxTsServerMemory": 8192,
+  "javascript.tsserver.maxTsServerMemory": 8192,
+  "typescript.disableAutomaticTypeAcquisition": true,
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false,
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/artifacts/**": true,
+    "**/coverage/**": true,
+    "**/playwright-report/**": true,
+    "**/test-results/**": true,
+    "**/tmp/**": true,
+    "**/*.log": true,
+    "**/*.exit": true,
+    "**/*.exit.txt": true,
+    "**/tsconfig.tsbuildinfo": true
+  },
+  "files.exclude": {
+    "**/.next": true,
+    "**/artifacts": true,
+    "**/coverage": true,
+    "**/playwright-report": true,
+    "**/test-results": true,
+    "**/tmp": true,
+    "**/*.log": true,
+    "**/*.exit": true,
+    "**/*.exit.txt": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/artifacts": true,
+    "**/coverage": true,
+    "**/playwright-report": true,
+    "**/test-results": true,
+    "**/tmp": true,
+    "**/*.log": true,
+    "**/*.exit": true,
+    "**/*.exit.txt": true
+  }
+}

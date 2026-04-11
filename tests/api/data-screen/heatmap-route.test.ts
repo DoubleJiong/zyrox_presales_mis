@@ -75,4 +75,71 @@ describe('data-screen heatmap route', () => {
       contractAmount: 350,
     });
   });
+
+  it('aggregates Zhejiang city metrics from customer address and project linkage instead of returning placeholders', async () => {
+    executeMock
+      .mockResolvedValueOnce([
+        { id: 1, address: '浙江省杭州市西湖区余杭塘路866号', customerName: '浙江大学' },
+        { id: 2, address: '浙江省宁波市鄞州区首南街道', customerName: '宁波城投' },
+      ])
+      .mockResolvedValueOnce([
+        {
+          projectId: 11,
+          projectName: '智算中心建设',
+          customerName: '浙江大学',
+          customerAddress: '浙江省杭州市西湖区余杭塘路866号',
+          estimatedAmount: 120,
+          actualAmount: 30,
+          contractAmount: 45,
+          projectStage: 'execution',
+          status: 'ongoing',
+        },
+        {
+          projectId: 12,
+          projectName: '城市大脑升级',
+          customerName: '宁波城投',
+          customerAddress: '浙江省宁波市鄞州区首南街道',
+          estimatedAmount: 80,
+          actualAmount: 0,
+          contractAmount: 20,
+          projectStage: 'bidding',
+          status: 'draft',
+        },
+      ])
+      .mockResolvedValueOnce([
+        { activityId: 1001, customerAddress: '浙江省杭州市西湖区余杭塘路866号', customerName: '浙江大学', projectName: '智算中心建设' },
+        { activityId: 1002, customerAddress: '浙江省杭州市西湖区余杭塘路866号', customerName: '浙江大学', projectName: '智算中心建设' },
+      ])
+      .mockResolvedValueOnce([
+        { solutionId: 501, customerAddress: '浙江省杭州市西湖区余杭塘路866号', customerName: '浙江大学', projectName: '智算中心建设' },
+      ]);
+
+    const { GET } = await import('../../../src/app/api/data-screen/heatmap/route');
+
+    const response = await GET(new NextRequest('http://localhost/api/data-screen/heatmap?mode=zhejiang'));
+    const payload = await response.json();
+    const hangzhou = payload.data.regions.find((region: { name: string }) => region.name === '杭州市');
+    const ningbo = payload.data.regions.find((region: { name: string }) => region.name === '宁波市');
+
+    expect(response.status).toBe(200);
+    expect(hangzhou).toMatchObject({
+      name: '杭州市',
+      customerCount: 1,
+      projectCount: 1,
+      projectAmount: 120,
+      ongoingProjectAmount: 120,
+      solutionUsage: 1,
+      preSalesActivity: 2,
+      budget: 120,
+      contractAmount: 45,
+    });
+    expect(ningbo).toMatchObject({
+      name: '宁波市',
+      customerCount: 1,
+      projectCount: 1,
+      projectAmount: 80,
+      ongoingProjectAmount: 80,
+      contractAmount: 20,
+    });
+  });
 });

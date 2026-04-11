@@ -706,7 +706,11 @@ export async function getWorkbenchSummaryReadModel(userId: number): Promise<Work
     .from(projects)
     .leftJoin(projectMembers, eq(projects.id, projectMembers.projectId))
     .where(and(
-      or(eq(projects.managerId, userId), eq(projectMembers.userId, userId)),
+      or(
+        eq(projects.managerId, userId),
+        eq(projects.deliveryManagerId, userId),
+        eq(projectMembers.userId, userId)
+      ),
       isNull(projects.deletedAt)
     ))
     .groupBy(projects.id);

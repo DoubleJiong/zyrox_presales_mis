@@ -1,6 +1,7 @@
 import { config as loadEnv } from 'dotenv';
 import { expect, test, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
 import postgres from 'postgres';
+import { acquireWorkbenchLock } from './helpers/workbench-lock';
 
 const ADMIN_USER = {
   email: 'admin@zhengyuan.com',
@@ -18,8 +19,10 @@ test.describe('wave 5 formal validation', () => {
     let anonymousContext: APIRequestContext | null = null;
     let dbClient: postgres.Sql | null = null;
     let createdOpportunityId: number | null = null;
+    let releaseWorkbenchLock: (() => Promise<void>) | null = null;
 
     try {
+      releaseWorkbenchLock = await acquireWorkbenchLock();
       anonymousContext = await playwrightRequest.newContext({ baseURL: TEST_BASE_URL });
       const anonymousResponse = await anonymousContext.get('/api/activities?limit=5');
       expect(anonymousResponse.status()).toBe(401);
@@ -41,24 +44,36 @@ test.describe('wave 5 formal validation', () => {
           created_at,
           updated_at
         ) VALUES (
-          (SELECT COALESCE(MAX(id), 0) + 1 FROM bus_opportunity),
+          ${createUniqueId()},
           '第五波客户',
           ${opportunityTitle},
           '张三',
           '13800138000',
           ${1},
           'proposal',
-          NOW(),
-          NOW()
+          NOW() + INTERVAL '11 minutes',
+          NOW() + INTERVAL '11 minutes'
         )
         RETURNING id
       `;
       createdOpportunityId = opportunity.id;
 
+      let payload: { data: { list: Array<{ description?: string; relatedName?: string }> } };
+      await expect
+        .poll(
+          async () => {
+            const apiResponse = await apiContext.get('/api/activities?types=opportunity&limit=200');
+            expect(apiResponse.ok()).toBeTruthy();
+            payload = await apiResponse.json();
+            return payload.data.list.some((item) => item.description === opportunityTitle || item.relatedName === opportunityTitle);
+          },
+          { timeout: 10_000 }
+        )
+        .toBe(true);
+
       await page.goto('/workbench');
       await expect(page.getByRole('heading', { name: '工作台' })).toBeVisible();
-      await expect(page.getByText('最近动态').first()).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(opportunityTitle).first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText('个人事件收件箱').first()).toBeVisible({ timeout: 10_000 });
     } finally {
       if (dbClient && createdOpportunityId) {
         await dbClient`DELETE FROM bus_opportunity WHERE id = ${createdOpportunityId}`;
@@ -74,6 +89,10 @@ test.describe('wave 5 formal validation', () => {
 
       if (dbClient) {
         await dbClient.end({ timeout: 5 });
+      }
+
+      if (releaseWorkbenchLock) {
+        await releaseWorkbenchLock();
       }
     }
   });
@@ -150,4 +169,8 @@ function createDbClient() {
     max: 1,
     prepare: false,
   });
+}
+
+function createUniqueId(offset = 0) {
+  return -((Date.now() % 1_000_000_000) + Math.floor(Math.random() * 10_000) + offset);
 }

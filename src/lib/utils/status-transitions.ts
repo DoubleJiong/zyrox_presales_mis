@@ -68,7 +68,7 @@ export const PROJECT_STAGE_CONFIG: Record<ProjectStage, { label: string; shortLa
   opportunity: { label: '商机阶段', shortLabel: '商机', color: 'blue', description: '线索跟进、需求澄清和立项准备。' },
   bidding_pending: { label: '投标立项待审批', shortLabel: '待审批', color: 'amber', description: '已提交投标立项审批，等待审批结果。' },
   bidding: { label: '招标投标', shortLabel: '投标', color: 'orange', description: '投标准备、报价和投标执行。' },
-  solution_review: { label: '方案评审中', shortLabel: '评审', color: 'violet', description: '方案进入正式评审链路。' },
+  solution_review: { label: '投标评标', shortLabel: '评标', color: 'violet', description: '项目进入投标评标与结果确认阶段。' },
   contract_pending: { label: '合同/商务确认中', shortLabel: '商务', color: 'cyan', description: '方案或商务条件已进入合同确认。' },
   delivery_preparing: { label: '执行准备中', shortLabel: '准备', color: 'emerald', description: '交付前资源、计划和交接准备。' },
   delivering: { label: '执行中', shortLabel: '执行', color: 'green', description: '项目进入交付执行阶段。' },

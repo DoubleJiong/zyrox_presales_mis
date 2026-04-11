@@ -19,7 +19,6 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import {
   FileText,
-  DollarSign,
   Calendar,
   Save,
   Upload,
@@ -58,17 +57,14 @@ interface BiddingData {
   lessonsLearned: string | null;
 }
 
-const BID_TYPE_CONFIG: Record<string, { label: string }> = {
-  public: { label: '公开招标' },
-  private: { label: '邀请招标' },
-  negotiation: { label: '竞争性谈判' },
-};
-
 // V1.3: 招标方式配置
 const BIDDING_METHOD_CONFIG: Record<string, { label: string }> = {
   open: { label: '公开招标' },
   invite: { label: '邀请招标' },
   competitive: { label: '竞争性谈判' },
+  consultation: { label: '竞争性磋商' },
+  inquiry: { label: '询价' },
+  centralized: { label: '集采' },
   single: { label: '单一来源' },
 };
 
@@ -86,6 +82,13 @@ const FUND_SOURCE_CONFIG: Record<string, { label: string }> = {
   bank: { label: '银行投资' },
   operator: { label: '运营商投资' },
   other: { label: '其他' },
+};
+
+const BID_TYPE_CONFIG: Record<string, { label: string }> = {
+  public: { label: '公开招标' },
+  private: { label: '邀请招标' },
+  negotiation: { label: '竞争性谈判' },
+  single: { label: '单一来源' },
 };
 
 const BOND_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -125,6 +128,24 @@ export function ProjectBidding({ projectId, defaultEditing = false }: ProjectBid
     }
   };
 
+  const formatDateInputValue = (value: string | null | undefined) => {
+    if (!value) return '';
+    const normalized = new Date(value);
+    if (Number.isNaN(normalized.getTime())) {
+      return '';
+    }
+    return normalized.toISOString().slice(0, 10);
+  };
+
+  const formatDateDisplayValue = (value: string | null | undefined) => {
+    if (!value) return '-';
+    const normalized = new Date(value);
+    if (Number.isNaN(normalized.getTime())) {
+      return value;
+    }
+    return normalized.toLocaleDateString('zh-CN');
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -159,9 +180,9 @@ export function ProjectBidding({ projectId, defaultEditing = false }: ProjectBid
             <div>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                投标信息
+                招投标信息
               </CardTitle>
-              <CardDescription>投标基本信息和状态</CardDescription>
+              <CardDescription>招标方式、标上名称和报价信息</CardDescription>
             </div>
             <Button
               variant={isEditing ? 'outline' : 'default'}
@@ -273,8 +294,7 @@ export function ProjectBidding({ projectId, defaultEditing = false }: ProjectBid
                   className="mt-1"
                 />
               ) : (
-                <p className="mt-1 font-medium flex items-center gap-1">
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <p className="mt-1 font-medium">
                   {currentData?.priceLimit ? `¥${Number(currentData.priceLimit).toLocaleString()}` : '-'}
                 </p>
               )}
@@ -303,31 +323,6 @@ export function ProjectBidding({ projectId, defaultEditing = false }: ProjectBid
                 </p>
               )}
             </div>
-            {/* 原有字段 */}
-            <div>
-              <Label className="text-muted-foreground">投标类型</Label>
-              {isEditing ? (
-                <Select
-                  value={currentData?.biddingType || ''}
-                  onValueChange={(value) => setEditedData({ ...editedData, biddingType: value })}
-                >
-                  <SelectTrigger data-testid="bidding-type-trigger" className="mt-1">
-                    <SelectValue placeholder="请选择投标类型" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(BID_TYPE_CONFIG).map(([key, config]) => (
-                      <SelectItem key={key} value={key}>
-                        {config.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <p className="mt-1 font-medium">
-                  {BID_TYPE_CONFIG[currentData?.biddingType || '']?.label || '-'}
-                </p>
-              )}
-            </div>
             <div>
               <Label className="text-muted-foreground">投标截止时间</Label>
               {isEditing ? (
@@ -341,7 +336,7 @@ export function ProjectBidding({ projectId, defaultEditing = false }: ProjectBid
               ) : (
                 <p className="mt-1 flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
-                  {currentData?.bidDeadline || '-'}
+                  {formatDateDisplayValue(currentData?.bidDeadline)}
                 </p>
               )}
             </div>
@@ -358,7 +353,7 @@ export function ProjectBidding({ projectId, defaultEditing = false }: ProjectBid
               ) : (
                 <p className="mt-1 flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
-                  {currentData?.bidOpenDate || '-'}
+                  {formatDateDisplayValue(currentData?.bidOpenDate)}
                 </p>
               )}
             </div>
@@ -385,8 +380,7 @@ export function ProjectBidding({ projectId, defaultEditing = false }: ProjectBid
                   className="mt-1"
                 />
               ) : (
-                <p className="mt-1 text-2xl font-bold flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-muted-foreground" />
+                <p className="mt-1 text-2xl font-bold">
                   {currentData?.bidPrice ? `¥${Number(currentData.bidPrice).toLocaleString()}` : '-'}
                 </p>
               )}

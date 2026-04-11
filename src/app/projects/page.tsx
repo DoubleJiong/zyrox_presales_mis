@@ -37,11 +37,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { DictSelect } from '@/components/dictionary/dict-select';
 import { CustomerSelect } from '@/components/ui/customer-select';
 import { ProjectTypeSelect } from '@/components/ui/project-type-select';
+import { ProjectQuickViewDrawer } from '@/components/project/project-quick-view-drawer';
 import { 
   AlertCircle, Plus, Upload, Download, Search, Edit, Trash2, 
   Calendar, TrendingUp, Building2, LayoutGrid, List, KanbanSquare, 
   ChevronLeft, ChevronRight, BarChart3, Users, Clock, CheckCircle,
-  PlayCircle, User, Star, ExternalLink, Check, Loader2
+  PlayCircle, User, Star, ExternalLink, Check, Loader2, ArrowDown, ArrowUp, ArrowUpDown
 } from 'lucide-react';
 import { validateAmount, validateDateRange, validateLength } from '@/lib/validators';
 import { PermissionButton, usePermissions } from '@/components/auth/PermissionProvider';
@@ -56,6 +57,15 @@ import {
   PROJECT_IMPORT_TEMPLATE_HEADERS,
 } from '@/lib/project-field-mappings';
 import { resolveEffectiveProjectStage } from '@/lib/project-display';
+import {
+  mapCustomerTypeCodeToDictValue,
+  resolveCanonicalCustomerTypeCode,
+} from '@/lib/customer-type-normalization';
+import {
+  getProjectTypeDisplayLabel,
+  getProjectTypeOaCategoryLabel,
+  normalizeProjectTypeCodes,
+} from '@/lib/project-type-codec';
 
 interface Project {
   id: number;
@@ -63,7 +73,8 @@ interface Project {
   projectName: string;
   customerId: number | null;
   customerName: string;
-  projectType: string;
+  projectType: string | null;
+  projectTypes?: string[];
   projectStage?: string | null;
   status: string;
   priority: string;
@@ -95,6 +106,8 @@ interface Project {
 
 type ViewMode = 'list' | 'grid' | 'kanban';
 type KanbanLane = 'opportunity' | 'pursuit' | 'delivery' | 'closed';
+type ProjectSortField = 'updatedAt' | 'estimatedAmount' | 'startDate' | 'expectedDeliveryDate';
+type ProjectSortDirection = 'asc' | 'desc';
 
 const ITEMS_PER_PAGE = 10;
 const PROJECT_STAGE_OPTIONS = Object.entries(PROJECT_STAGE_CONFIG).map(([value, config]) => ({
@@ -130,6 +143,19 @@ function getKanbanLane(stage: ProjectStage): KanbanLane {
   return 'closed';
 }
 
+function normalizeCustomerTypeFilterValue(value?: string | null): string {
+  if (!value) {
+    return '';
+  }
+
+  const canonicalCode = resolveCanonicalCustomerTypeCode(value);
+  if (canonicalCode) {
+    return mapCustomerTypeCodeToDictValue(canonicalCode);
+  }
+
+  return value.trim().toLowerCase();
+}
+
 export default function ProjectsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -146,6 +172,9 @@ export default function ProjectsPage() {
   const [actualAmountFilter, setActualAmountFilter] = useState('all');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortField, setSortField] = useState<ProjectSortField>('updatedAt');
+  const [sortDirection, setSortDirection] = useState<ProjectSortDirection>('desc');
+  const [quickViewProjectId, setQuickViewProjectId] = useState<number | null>(null);
   
   // 新建/编辑项目相关
   const [addProjectDialogOpen, setAddProjectDialogOpen] = useState(false);
@@ -159,6 +188,7 @@ export default function ProjectsPage() {
     customerId: undefined as number | undefined,
     customerName: '',
     projectType: '',  // 默认为空，让用户选择
+    projectTypes: [] as string[],
     industry: '',
     region: '',
     priority: 'medium',
@@ -191,6 +221,7 @@ export default function ProjectsPage() {
 
   // 项目类型选项
   const [projectTypeOptions, setProjectTypeOptions] = useState<{value: string; label: string}[]>([]);
+  const [customerTypeFilterOptions, setCustomerTypeFilterOptions] = useState<{value: string; label: string}[]>([]);
 
   // 加载项目类型选项
   const loadProjectTypeOptions = async () => {
@@ -202,6 +233,18 @@ export default function ProjectsPage() {
       }
     } catch (error) {
       console.error('Failed to load project type options:', error);
+    }
+  };
+
+  const loadCustomerTypeFilterOptions = async () => {
+    try {
+      const response = await fetch('/api/dictionary/options?categories=industry');
+      const data = await response.json();
+      if (data.success && data.data?.industry) {
+        setCustomerTypeFilterOptions(data.data.industry);
+      }
+    } catch (error) {
+      console.error('Failed to load customer type filter options:', error);
     }
   };
 
@@ -233,7 +276,10 @@ export default function ProjectsPage() {
       }
 
       if (allProjects.length > 0 || total === 0) {
-        setProjects(allProjects);
+        setProjects(allProjects.map((project) => ({
+          ...project,
+          projectTypes: normalizeProjectTypeCodes(project.projectType),
+        })));
         setTotalCount(total || allProjects.length);
       }
     } catch (error) {
@@ -261,6 +307,7 @@ export default function ProjectsPage() {
     fetchProjects();
     fetchStarredProjects();
     loadProjectTypeOptions();
+    loadCustomerTypeFilterOptions();
   }, []);
 
   useEffect(() => {
@@ -272,7 +319,7 @@ export default function ProjectsPage() {
     setStatusFilter(stage || 'all');
     setSearchTerm(search || '');
     setPriorityFilter(priority || 'all');
-    setTypeFilter(type || 'all');
+    setTypeFilter(type ? normalizeCustomerTypeFilterValue(type) : 'all');
   }, [searchParams]);
 
   // 切换项目重点标记
@@ -332,15 +379,52 @@ export default function ProjectsPage() {
     }
   };
 
+  const handleProjectSortChange = (field: ProjectSortField) => {
+    setCurrentPage(1);
+    if (sortField === field) {
+      setSortDirection((current) => (current === 'desc' ? 'asc' : 'desc'));
+      return;
+    }
+
+    setSortField(field);
+    setSortDirection(field === 'updatedAt' ? 'desc' : 'asc');
+  };
+
+  const renderSortIcon = (field: ProjectSortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+    }
+
+    return sortDirection === 'desc'
+      ? <ArrowDown className="h-3.5 w-3.5" />
+      : <ArrowUp className="h-3.5 w-3.5" />;
+  };
+
+  const renderSortHeader = (label: string, field: ProjectSortField, align: 'left' | 'right' = 'left') => (
+    <button
+      type="button"
+      className={`inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground ${align === 'right' ? 'ml-auto' : ''}`}
+      onClick={() => handleProjectSortChange(field)}
+    >
+      <span>{label}</span>
+      {renderSortIcon(field)}
+    </button>
+  );
+
+  const openProjectDrilldown = (projectId: number) => {
+    setQuickViewProjectId(projectId);
+  };
+
   // 过滤项目
   const filteredProjects = projects.filter((project) => {
     const effectiveStage = resolveEffectiveProjectStage(project);
+    const customerTypeValue = normalizeCustomerTypeFilterValue(project.industry);
     const matchesSearch =
       (project.projectName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (project.customerName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (project.projectCode?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || effectiveStage === statusFilter;
-    const matchesType = typeFilter === 'all' || project.projectType === typeFilter;
+    const matchesType = typeFilter === 'all' || customerTypeValue === typeFilter;
     const matchesPriority = priorityFilter === 'all' || project.priority === priorityFilter;
     
     // 预算金额筛选
@@ -372,16 +456,36 @@ export default function ProjectsPage() {
     return matchesSearch && matchesStatus && matchesType && matchesPriority && matchesEstimatedAmount && matchesActualAmount;
   });
 
-  // 分页逻辑 - 基于过滤后的项目数量计算总页数
-  const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);
-  const paginatedProjects = filteredProjects.slice(
+  const sortedProjects = [...filteredProjects].sort((left, right) => {
+    const getComparableValue = (project: Project) => {
+      switch (sortField) {
+        case 'estimatedAmount':
+          return Number(project.estimatedAmount) || 0;
+        case 'startDate':
+          return project.startDate ? new Date(project.startDate).getTime() : 0;
+        case 'expectedDeliveryDate':
+          return project.expectedDeliveryDate ? new Date(project.expectedDeliveryDate).getTime() : 0;
+        case 'updatedAt':
+        default:
+          return project.updatedAt ? new Date(project.updatedAt).getTime() : 0;
+      }
+    };
+
+    const leftValue = getComparableValue(left);
+    const rightValue = getComparableValue(right);
+    return sortDirection === 'desc' ? rightValue - leftValue : leftValue - rightValue;
+  });
+
+  // 分页逻辑 - 基于过滤和排序后的项目数量计算总页数
+  const totalPages = Math.ceil(sortedProjects.length / ITEMS_PER_PAGE);
+  const paginatedProjects = sortedProjects.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, typeFilter, priorityFilter, estimatedAmountFilter, actualAmountFilter]);
+  }, [searchTerm, statusFilter, typeFilter, priorityFilter, estimatedAmountFilter, actualAmountFilter, sortField, sortDirection]);
 
   const getStageBadge = (project: Project) => {
     const stage = resolveEffectiveProjectStage(project);
@@ -422,15 +526,21 @@ export default function ProjectsPage() {
     return <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityInfo.color}`}>{priorityInfo.label}</span>;
   };
 
-  const getProjectTypeLabel = (type: string) => {
-    const typeMap: Record<string, string> = {
-      software: '软件',
-      integration: '集成',
-      consulting: '咨询',
-      maintenance: '维护',
-      other: '其他',
-    };
-    return typeMap[type] || type;
+  const renderProjectTypeBadges = (project: Project, compact = false) => {
+    const typeCodes = project.projectTypes || normalizeProjectTypeCodes(project.projectType);
+    if (typeCodes.length === 0) {
+      return <span className="text-muted-foreground">-</span>;
+    }
+
+    return (
+      <div className="flex flex-wrap gap-1">
+        {typeCodes.map((code) => (
+          <Badge key={`${project.id}-${code}`} variant="outline" className={compact ? 'text-[10px] px-1 py-0' : 'text-xs'}>
+            {getProjectTypeDisplayLabel(code)} / {getProjectTypeOaCategoryLabel(code)}
+          </Badge>
+        ))}
+      </div>
+    );
   };
 
   // 检查项目名称是否重复
@@ -469,7 +579,7 @@ export default function ProjectsPage() {
 
   const handleAddProject = async () => {
     // 验证必填字段
-    if (!newProject.projectName || !newProject.customerName || !newProject.projectType) {
+    if (!newProject.projectName || !newProject.customerName || newProject.projectTypes.length === 0) {
       toast({
         variant: 'destructive',
         title: '验证失败',
@@ -512,8 +622,8 @@ export default function ProjectsPage() {
     setSubmittingProject(true);
     try {
       const requestPayload = editingProject
-        ? { id: editingProject.id, ...newProject }
-        : newProject;
+        ? { id: editingProject.id, ...newProject, projectType: newProject.projectTypes[0] || '', projectTypes: newProject.projectTypes }
+        : { ...newProject, projectType: newProject.projectTypes[0] || '', projectTypes: newProject.projectTypes };
       const response = editingProject
         ? await apiClient.put<{ success: boolean; error?: string }>('/api/projects', requestPayload)
         : await apiClient.post<{ success: boolean; error?: string }>('/api/projects', requestPayload);
@@ -527,6 +637,7 @@ export default function ProjectsPage() {
           customerId: undefined,
           customerName: '',
           projectType: '',  // 默认为空
+          projectTypes: [],
           industry: '',
           region: '',
           priority: 'medium',
@@ -596,7 +707,8 @@ export default function ProjectsPage() {
       projectName: project.projectName,
       customerId: project.customerId,
       customerName: project.customerName,
-      projectType: project.projectType,
+      projectType: project.projectType || '',
+      projectTypes: project.projectTypes || normalizeProjectTypeCodes(project.projectType),
       industry: project.industry || '',
       region: project.region || '',
       priority: project.priority,
@@ -790,7 +902,7 @@ export default function ProjectsPage() {
                           <div><strong className="text-red-500">*</strong>项目名称：必填</div>
                           <div>客户名称：系统自动匹配已有客户</div>
                           <div>项目类型：软件开发/系统集成/咨询服务/运维服务/其他</div>
-                          <div>项目阶段：商机/招标投标/实施交付/已归档/已取消</div>
+                          <div>项目阶段：商机阶段/招标投标/方案评审中/合同/商务确认中/执行准备中/执行中/结算中/已归档/已取消</div>
                           <div>客户类型/行业：默认与客户保持一致，兼容历史行业值</div>
                           <div>区域：华北/华东/华南/华中/西北/西南/东北等</div>
                           <div>预计金额：数字</div>
@@ -995,6 +1107,7 @@ export default function ProjectsPage() {
                     customerId: undefined,
                     customerName: '', 
                     projectType: '',  // 默认为空
+                    projectTypes: [],
                     industry: '', 
                     region: '', 
                     priority: 'medium', 
@@ -1060,6 +1173,7 @@ export default function ProjectsPage() {
                           region: customer.region || newProject.region,
                           industry: customer.customerType || newProject.industry,
                           projectType: customer.defaultProjectTypeCode || newProject.projectType,
+                          projectTypes: customer.defaultProjectTypeCode ? [customer.defaultProjectTypeCode] : newProject.projectTypes,
                           customerId: customer.id,
                         });
                       } else {
@@ -1076,13 +1190,16 @@ export default function ProjectsPage() {
                     <ProjectTypeSelect
                       options={projectTypeOptions}
                       value={newProject.projectType}
-                      onValueChange={(value) => setNewProject({ ...newProject, projectType: value })}
+                      values={newProject.projectTypes}
+                      onValuesChange={(values) => setNewProject({ ...newProject, projectTypes: values, projectType: values[0] || '' })}
                       placeholder="搜索并选择项目类型"
+                      multiple
                     />
+                    <p className="text-xs text-muted-foreground">按 OA 分类分组，可多选；首个选中项会作为兼容主类型保存。</p>
                   </div>
                   <div className="space-y-2">
-                    <Label>兼容状态</Label>
-                    <Input value="商机线索" readOnly className="bg-muted" />
+                    <Label>初始项目阶段</Label>
+                    <Input value="商机阶段" readOnly className="bg-muted" />
                     <p className="text-xs text-muted-foreground">新建项目默认进入商机阶段；中标、丢标和归档结果请在项目详情页维护。</p>
                   </div>
                 </div>
@@ -1119,7 +1236,7 @@ export default function ProjectsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="estimatedAmount">项目预算</Label>
+                    <Label htmlFor="estimatedAmount">项目预算 <span className="text-red-500">*</span></Label>
                     <Input id="estimatedAmount" type="number" value={newProject.estimatedAmount} onChange={(e) => setNewProject({ ...newProject, estimatedAmount: e.target.value })} placeholder="请输入项目预算" />
                   </div>
                 </div>
@@ -1215,7 +1332,7 @@ export default function ProjectsPage() {
       </div>
 
       {/* 搜索和筛选 */}
-      <Card>
+      <Card className="sticky top-4 z-20 border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4 items-center">
             <div className="flex-1 min-w-[200px] relative">
@@ -1240,13 +1357,19 @@ export default function ProjectsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <ProjectTypeSelect
-              options={projectTypeOptions}
-              value={typeFilter === 'all' ? '' : typeFilter}
-              onValueChange={(value) => setTypeFilter(value || 'all')}
-              placeholder="项目类型"
-              className="w-[150px]"
-            />
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="客户类型" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部客户类型</SelectItem>
+                {customerTypeFilterOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <DictSelect
               category="priority"
               value={priorityFilter === 'all' ? '' : priorityFilter}
@@ -1323,16 +1446,19 @@ export default function ProjectsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[260px]">项目名称</TableHead>
+                        <TableHead className="sticky left-0 z-20 w-[260px] bg-background">项目名称</TableHead>
                         <TableHead className="w-[180px]">客户</TableHead>
                         <TableHead className="w-[120px]">客户类型/行业</TableHead>
                         <TableHead className="w-[100px]">区域</TableHead>
+                        <TableHead className="w-[220px]">项目类型 / OA 分类</TableHead>
                         <TableHead className="w-[140px]">项目阶段</TableHead>
                         <TableHead className="w-[100px]">优先级</TableHead>
-                        <TableHead className="w-[140px] text-right">预计预算</TableHead>
+                        <TableHead className="w-[120px]">{renderSortHeader('开始日期', 'startDate')}</TableHead>
+                        <TableHead className="w-[120px]">{renderSortHeader('预计交付', 'expectedDeliveryDate')}</TableHead>
+                        <TableHead className="w-[140px] text-right">{renderSortHeader('预计预算', 'estimatedAmount', 'right')}</TableHead>
                         <TableHead className="w-[120px]">负责人</TableHead>
-                        <TableHead className="w-[120px]">更新时间</TableHead>
-                        <TableHead className="w-[160px] text-right">操作</TableHead>
+                        <TableHead className="w-[120px]">{renderSortHeader('更新时间', 'updatedAt')}</TableHead>
+                        <TableHead className="sticky right-0 z-20 w-[160px] bg-background text-right">操作</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1342,9 +1468,9 @@ export default function ProjectsPage() {
                           data-project-name={project.projectName}
                           key={project.id}
                           className="cursor-pointer"
-                          onClick={() => router.push(`/projects/${project.id}`)}
+                          onClick={() => openProjectDrilldown(project.id)}
                         >
-                          <TableCell>
+                          <TableCell className="sticky left-0 z-10 bg-background">
                             <div className="min-w-0 space-y-1">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium truncate">{project.projectName}</span>
@@ -1369,10 +1495,13 @@ export default function ProjectsPage() {
                           </TableCell>
                           <TableCell>{project.industry ? getProjectCustomerTypeOrIndustryLabel(project.industry) : '-'}</TableCell>
                           <TableCell>{project.region || '-'}</TableCell>
+                          <TableCell>{renderProjectTypeBadges(project)}</TableCell>
                           <TableCell>
                             {getStageBadge(project)}
                           </TableCell>
                           <TableCell>{getPriorityBadge(project.priority)}</TableCell>
+                          <TableCell>{project.startDate ? new Date(project.startDate).toLocaleDateString() : '-'}</TableCell>
+                          <TableCell>{project.expectedDeliveryDate ? new Date(project.expectedDeliveryDate).toLocaleDateString() : '-'}</TableCell>
                           <TableCell className="text-right">{project.estimatedAmount ? `¥${Number(project.estimatedAmount).toLocaleString()}` : '-'}</TableCell>
                           <TableCell>
                             {project.managerName ? (
@@ -1383,7 +1512,7 @@ export default function ProjectsPage() {
                             ) : '-'}
                           </TableCell>
                           <TableCell>{project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : '-'}</TableCell>
-                          <TableCell>
+                          <TableCell className="sticky right-0 z-10 bg-background">
                             <div className="flex items-center justify-end gap-1 shrink-0">
                               <Button
                                 variant="ghost"
@@ -1396,7 +1525,7 @@ export default function ProjectsPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={(e) => { e.stopPropagation(); router.push(`/projects/${project.id}`); }}
+                                onClick={(e) => { e.stopPropagation(); openProjectDrilldown(project.id); }}
                                 title="查看详情"
                               >
                                 <ExternalLink className="h-4 w-4" />
@@ -1433,7 +1562,7 @@ export default function ProjectsPage() {
                 {totalPages > 1 && (
                   <nav aria-label="pagination" data-testid="pagination" className="flex items-center justify-between mt-4 pt-4 border-t">
                     <div className="text-sm text-muted-foreground">
-                      显示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredProjects.length)} 条，共 {filteredProjects.length} 条
+                      显示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, sortedProjects.length)} 条，共 {sortedProjects.length} 条
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -1500,7 +1629,7 @@ export default function ProjectsPage() {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {paginatedProjects.map((project) => (
-                    <Card key={project.id} className="hover:shadow-md transition-shadow">
+                    <Card key={project.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openProjectDrilldown(project.id)}>
                       <CardHeader className="pb-2 pt-3 px-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
@@ -1520,7 +1649,7 @@ export default function ProjectsPage() {
                               variant="ghost"
                               size="sm"
                               className="h-6 w-6 p-0"
-                              onClick={() => router.push(`/projects/${project.id}`)}
+                              onClick={(e) => { e.stopPropagation(); openProjectDrilldown(project.id); }}
                             >
                               <ExternalLink className="h-3 w-3" />
                             </Button>
@@ -1530,7 +1659,7 @@ export default function ProjectsPage() {
                               className="h-6 w-6 p-0"
                               permission={PERMISSIONS.PROJECT_UPDATE}
                               hideWhenNoPermission
-                              onClick={() => handleEdit(project)}
+                              onClick={(e) => { e.stopPropagation(); handleEdit(project); }}
                             >
                               <Edit className="h-3 w-3" />
                             </PermissionButton>
@@ -1540,7 +1669,7 @@ export default function ProjectsPage() {
                               className="h-6 w-6 p-0"
                               permission={PERMISSIONS.PROJECT_DELETE}
                               hideWhenNoPermission
-                              onClick={() => handleDeleteProject(project.id)}
+                              onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
                             >
                               <Trash2 className="h-3 w-3" />
                             </PermissionButton>
@@ -1557,7 +1686,7 @@ export default function ProjectsPage() {
                             {getStageBadge(project)}
                             {getPriorityBadge(project.priority)}
                           </div>
-                          <Badge variant="outline" className="text-[10px] px-1 py-0">{getProjectTypeLabel(project.projectType)}</Badge>
+                          {renderProjectTypeBadges(project, true)}
                         </div>
                         {project.estimatedAmount && (
                           <div className="text-xs">
@@ -1589,7 +1718,7 @@ export default function ProjectsPage() {
                 {totalPages > 1 && (
                   <nav aria-label="pagination" data-testid="pagination" className="flex items-center justify-between mt-4 pt-4 border-t">
                     <div className="text-sm text-muted-foreground">
-                      显示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredProjects.length)} 条，共 {filteredProjects.length} 条
+                      显示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, sortedProjects.length)} 条，共 {sortedProjects.length} 条
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -1663,7 +1792,7 @@ export default function ProjectsPage() {
                   </div>
                   <div className="space-y-2 max-h-[500px] overflow-y-auto">
                     {columnProjects.map((project) => (
-                      <Card key={project.id} className="hover:shadow-md transition-shadow">
+                      <Card key={project.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openProjectDrilldown(project.id)}>
                         <CardHeader className="pb-1 pt-2 px-2">
                           <div className="flex items-start justify-between gap-1">
                             <CardTitle className="text-xs font-medium line-clamp-2 flex-1">{project.projectName}</CardTitle>
@@ -1680,7 +1809,7 @@ export default function ProjectsPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-5 w-5 p-0"
-                                onClick={() => router.push(`/projects/${project.id}`)}
+                                onClick={(e) => { e.stopPropagation(); openProjectDrilldown(project.id); }}
                               >
                                 <ExternalLink className="h-3 w-3" />
                               </Button>
@@ -1690,7 +1819,7 @@ export default function ProjectsPage() {
                                 className="h-5 w-5 p-0"
                                 permission={PERMISSIONS.PROJECT_UPDATE}
                                 hideWhenNoPermission
-                                onClick={() => handleEdit(project)}
+                                onClick={(e) => { e.stopPropagation(); handleEdit(project); }}
                               >
                                 <Edit className="h-3 w-3" />
                               </PermissionButton>
@@ -1700,7 +1829,7 @@ export default function ProjectsPage() {
                                 className="h-5 w-5 p-0"
                                 permission={PERMISSIONS.PROJECT_DELETE}
                                 hideWhenNoPermission
-                                onClick={() => handleDeleteProject(project.id)}
+                                onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
                               >
                                 <Trash2 className="h-3 w-3" />
                               </PermissionButton>
@@ -1716,7 +1845,7 @@ export default function ProjectsPage() {
                             {getPriorityBadge(project.priority)}
                             <div className="flex items-center gap-1">
                               {getStageBadge(project)}
-                              <Badge variant="outline" className="text-[10px] px-1 py-0">{getProjectTypeLabel(project.projectType)}</Badge>
+                              {renderProjectTypeBadges(project, true)}
                             </div>
                           </div>
                           {project.estimatedAmount && (
@@ -1755,7 +1884,7 @@ export default function ProjectsPage() {
           {totalPages > 1 && (
             <nav aria-label="pagination" data-testid="pagination" className="flex items-center justify-between pt-4 border-t">
               <div className="text-sm text-muted-foreground">
-                显示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredProjects.length)} 条，共 {filteredProjects.length} 条
+                显示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, sortedProjects.length)} 条，共 {sortedProjects.length} 条
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -1805,6 +1934,17 @@ export default function ProjectsPage() {
           )}
         </div>
       )}
+
+      <ProjectQuickViewDrawer
+        open={quickViewProjectId !== null}
+        projectId={quickViewProjectId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setQuickViewProjectId(null);
+          }
+        }}
+        onOpenDetailPage={(projectId) => router.push(`/projects/${projectId}`)}
+      />
     </div>
   );
 }

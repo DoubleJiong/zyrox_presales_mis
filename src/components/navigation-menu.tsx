@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { LayoutDashboard, Users, FolderKanban, BarChart3, FileText, Settings, MonitorPlay, Scale, Bell, Calendar, CheckSquare, MessageSquare, FileCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { usePermissions } from '@/components/auth/PermissionProvider';
+import { PERMISSIONS } from '@/lib/permissions';
 
 export interface NavItem {
   title: string;
@@ -10,6 +12,7 @@ export interface NavItem {
   icon: any;
   badge?: number;
   badgeKey?: string; // 用于从API获取badge
+  requiredPermissions?: string[];
 }
 
 // 静态导航项配置
@@ -28,6 +31,7 @@ export const navItemsConfig: Omit<NavItem, 'badge'>[] = [
     title: '数据大屏',
     href: '/data-screen',
     icon: MonitorPlay,
+    requiredPermissions: [PERMISSIONS.DATASCREEN_VIEW],
   },
   {
     title: '客户管理',
@@ -126,11 +130,24 @@ export function useNavBadges() {
 // 导出带有动态badge的导航项
 export function useNavItems(): NavItem[] {
   const badges = useNavBadges();
-  
-  return navItemsConfig.map(item => ({
+  const { hasAnyPermission, isLoading } = usePermissions();
+
+  return navItemsConfig
+    .filter(item => {
+      if (!item.requiredPermissions || item.requiredPermissions.length === 0) {
+        return true;
+      }
+
+      if (isLoading) {
+        return false;
+      }
+
+      return hasAnyPermission(item.requiredPermissions);
+    })
+    .map(item => ({
     ...item,
     badge: item.badgeKey ? (badges[item.badgeKey] || 0) : undefined,
-  }));
+    }));
 }
 
 // 兼容旧代码的静态导出

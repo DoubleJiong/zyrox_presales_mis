@@ -1,4 +1,6 @@
+import { config as loadEnv } from 'dotenv';
 import { expect, test, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
+import postgres from 'postgres';
 
 const ADMIN_USER = {
   email: 'admin@zhengyuan.com',
@@ -8,36 +10,51 @@ const ADMIN_USER = {
 const TEST_BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5000';
 const TEST_BASE_ORIGIN = new URL(TEST_BASE_URL);
 
+loadEnv({ path: '.env.local' });
+
 test.describe('wave 1 formal validation', () => {
   test('loads messages on the formal artifact and keeps schedules aliases on calendar', async ({ page }) => {
     let apiContext: APIRequestContext | null = null;
+    let dbClient: postgres.Sql | null = null;
     let createdMessageId: number | null = null;
 
     try {
       await loginAsAdmin(page);
       apiContext = await createApiContextFromPage(page);
-
-      const meResponse = await apiContext.get('/api/auth/me');
-      expect(meResponse.ok()).toBeTruthy();
-      const mePayload = await meResponse.json();
-      const currentUserId = mePayload?.data?.id;
-      expect(currentUserId).toBeTruthy();
+      dbClient = createDbClient();
 
       const title = `wave1-message-${Date.now()}`;
-      const createMessageResponse = await apiContext.post('/api/messages', {
-        data: {
-          title,
-          content: 'wave 1 formal runtime validation',
-          type: 'message',
-          category: 'system',
-          priority: 'normal',
-          receiverId: currentUserId,
-        },
-      });
+      createdMessageId = createUniqueId();
 
-      expect(createMessageResponse.ok()).toBeTruthy();
-      const createMessagePayload = await createMessageResponse.json();
-      createdMessageId = createMessagePayload?.data?.id ?? null;
+      await dbClient`
+        INSERT INTO sys_message (
+          id,
+          title,
+          content,
+          type,
+          category,
+          priority,
+          sender_id,
+          receiver_id,
+          is_read,
+          is_deleted,
+          created_at,
+          updated_at
+        ) VALUES (
+          ${createdMessageId},
+          ${title},
+          'wave 1 formal runtime validation',
+          'message',
+          'system',
+          'normal',
+          ${1},
+          ${1},
+          false,
+          false,
+          NOW(),
+          NOW()
+        )
+      `;
 
       await page.goto('/messages');
       await expect(page.getByRole('heading', { name: '消息中心' })).toBeVisible();
@@ -60,12 +77,16 @@ test.describe('wave 1 formal validation', () => {
       await expect(page).toHaveURL(/\/calendar/);
       await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
     } finally {
-      if (apiContext && createdMessageId) {
-        await apiContext.delete(`/api/messages/${createdMessageId}`);
+      if (dbClient && createdMessageId) {
+        await dbClient`DELETE FROM sys_message WHERE id = ${createdMessageId}`;
       }
 
       if (apiContext) {
         await apiContext.dispose();
+      }
+
+      if (dbClient) {
+        await dbClient.end({ timeout: 5 });
       }
     }
   });
@@ -129,4 +150,21 @@ async function createApiContextFromPage(page: Page) {
       Authorization: `Bearer ${token}`,
     },
   });
+}
+
+function createDbClient() {
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL is required for wave 1 formal setup');
+  }
+
+  return postgres(databaseUrl, {
+    max: 1,
+    prepare: false,
+  });
+}
+
+function createUniqueId(offset = 0) {
+  return -((Date.now() % 1_000_000_000) + Math.floor(Math.random() * 10_000) + offset);
 }

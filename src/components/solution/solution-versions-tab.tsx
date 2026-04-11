@@ -52,6 +52,28 @@ import {
 } from 'lucide-react';
 import { VersionCompareDialog } from './version-compare-dialog';
 
+interface VersionApiRecord {
+  id: number;
+  solutionId: number;
+  version?: string;
+  versionNumber?: string;
+  versionName?: string | null;
+  changelog?: string | null;
+  changeLog?: string | null;
+  status?: string;
+  isCurrent?: boolean;
+  isLatest?: boolean;
+  isPublished?: boolean;
+  publishedAt?: string | null;
+  publishedBy?: number | null;
+  publisherName?: string | null;
+  createdAt: string;
+  creatorId?: number;
+  createdBy?: number;
+  creatorName?: string | null;
+  snapshot?: Version['snapshot'];
+}
+
 interface Version {
   id: number;
   solutionId: number;
@@ -93,8 +115,34 @@ interface SolutionVersionsTabProps {
 const versionStatusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   draft: { label: '草稿', variant: 'secondary' },
   published: { label: '已发布', variant: 'default' },
+  released: { label: '已发布', variant: 'default' },
   deprecated: { label: '已废弃', variant: 'destructive' },
 };
+
+function normalizeVersion(record: VersionApiRecord): Version {
+  const normalizedStatus = record.status === 'released'
+    ? 'published'
+    : (record.status || 'draft');
+
+  return {
+    id: record.id,
+    solutionId: record.solutionId,
+    versionNumber: record.versionNumber || record.version || '',
+    versionName: record.versionName || null,
+    changeLog: record.changeLog || record.changelog || null,
+    status: (normalizedStatus === 'published' || normalizedStatus === 'draft' || normalizedStatus === 'deprecated'
+      ? normalizedStatus
+      : 'draft') as Version['status'],
+    isLatest: record.isLatest ?? record.isCurrent ?? false,
+    publishedAt: record.publishedAt || null,
+    publishedBy: record.publishedBy || null,
+    publisherName: record.publisherName || null,
+    createdAt: record.createdAt,
+    createdBy: record.createdBy ?? record.creatorId ?? 0,
+    creatorName: record.creatorName || null,
+    snapshot: record.snapshot || null,
+  };
+}
 
 export function SolutionVersionsTab({ solutionId, permissions }: SolutionVersionsTabProps) {
   const router = useRouter();
@@ -116,6 +164,7 @@ export function SolutionVersionsTab({ solutionId, permissions }: SolutionVersion
   const [newVersion, setNewVersion] = useState({
     versionName: '',
     changeLog: '',
+    changeType: 'minor' as 'major' | 'minor' | 'patch',
   });
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null);
   const [publishNotes, setPublishNotes] = useState('');
@@ -134,7 +183,12 @@ export function SolutionVersionsTab({ solutionId, permissions }: SolutionVersion
       const response = await fetch(`/api/solutions/${solutionId}/versions`);
       if (response.ok) {
         const data = await response.json();
-        setVersions(data.versions || []);
+        const records = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.versions)
+            ? data.versions
+            : [];
+        setVersions(records.map(normalizeVersion));
       }
     } catch (error) {
       console.error('Failed to fetch versions:', error);
@@ -165,8 +219,8 @@ export function SolutionVersionsTab({ solutionId, permissions }: SolutionVersion
   };
 
   const handleCreateVersion = async () => {
-    if (!newVersion.versionName.trim()) {
-      toast({ title: '请输入版本名称', variant: 'destructive' });
+    if (!newVersion.changeLog.trim()) {
+      toast({ title: '请输入变更说明', variant: 'destructive' });
       return;
     }
 
@@ -174,13 +228,18 @@ export function SolutionVersionsTab({ solutionId, permissions }: SolutionVersion
       const response = await fetch(`/api/solutions/${solutionId}/versions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newVersion),
+        body: JSON.stringify({
+          versionName: newVersion.versionName.trim() || undefined,
+          changelog: newVersion.changeLog.trim(),
+          changeType: newVersion.changeType,
+          changeSource: 'manual',
+        }),
       });
 
       if (response.ok) {
         fetchVersions();
         setShowCreateDialog(false);
-        setNewVersion({ versionName: '', changeLog: '' });
+        setNewVersion({ versionName: '', changeLog: '', changeType: 'minor' });
         toast({ title: '版本创建成功' });
       } else {
         const error = await response.json();
@@ -295,7 +354,7 @@ export function SolutionVersionsTab({ solutionId, permissions }: SolutionVersion
               {canEdit && (
                 <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
                   <DialogTrigger asChild>
-                    <Button size="sm">
+                    <Button size="sm" data-testid="solution-version-create-button">
                       <Plus className="h-4 w-4 mr-2" />
                       创建版本
                     </Button>
@@ -313,6 +372,21 @@ export function SolutionVersionsTab({ solutionId, permissions }: SolutionVersion
                           onChange={(e) => setNewVersion({ ...newVersion, versionName: e.target.value })}
                           placeholder="例如：V2.0 - 重大更新"
                         />
+                      </div>
+                      <div>
+                        <Label>变更类型</Label>
+                        <select
+                          className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={newVersion.changeType}
+                          onChange={(e) => setNewVersion({
+                            ...newVersion,
+                            changeType: e.target.value as 'major' | 'minor' | 'patch',
+                          })}
+                        >
+                          <option value="major">重大变更</option>
+                          <option value="minor">常规变更</option>
+                          <option value="patch">小版本修复</option>
+                        </select>
                       </div>
                       <div>
                         <Label>变更说明</Label>
@@ -537,9 +611,10 @@ export function SolutionVersionsTab({ solutionId, permissions }: SolutionVersion
                 <Button
                   variant="outline"
                   className="mt-4"
+                  data-testid="solution-version-create-button"
                   onClick={() => setShowCreateDialog(true)}
                 >
-                  创建第一个版本
+                  创建版本
                 </Button>
               )}
             </div>

@@ -420,6 +420,10 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     fields: [projects.id],
     references: [projectSettlements.projectId],
   }),
+  projectImplementation: one(projectImplementations, {
+    fields: [projects.id],
+    references: [projectImplementations.projectId],
+  }),
   quotations: many(quotations),
   tasks: many(tasks),
   arbitrations: many(arbitrations),
@@ -680,6 +684,35 @@ export const projectSettlementsRelations = relations(projectSettlements, ({ one 
   archiver: one(users, {
     fields: [projectSettlements.archivedBy],
     references: [users.id],
+  }),
+}));
+
+// ============================================
+// V1.3: 项目实施方案表
+// ============================================
+
+export const projectImplementations = pgTable('bus_project_implementation', {
+  id: serial('id').primaryKey(),
+  projectId: integer('project_id').references(() => projects.id).notNull().unique(),
+  implementationStatus: varchar('implementation_status', { length: 50 }).default('planning'), // planning, in_progress, completed
+  deliveryPlan: text('delivery_plan'),         // 交付计划
+  implementationSteps: text('implementation_steps'), // 实施内容/步骤
+  acceptanceCriteria: text('acceptance_criteria'),   // 验收标准
+  riskMitigation: text('risk_mitigation'),           // 风险应对
+  progressNotes: text('progress_notes'),             // 进度备注
+  plannedStartDate: date('planned_start_date'),      // 计划开始日期
+  plannedEndDate: date('planned_end_date'),          // 计划结束日期
+  actualStartDate: date('actual_start_date'),        // 实际开始日期
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  idxProjectId: index('idx_project_implementation_project').on(table.projectId),
+}));
+
+export const projectImplementationsRelations = relations(projectImplementations, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectImplementations.projectId],
+    references: [projects.id],
   }),
 }));
 

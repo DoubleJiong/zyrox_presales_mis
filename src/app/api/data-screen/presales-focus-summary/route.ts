@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
+import { PERMISSIONS } from '@/lib/permissions';
 import { getAccessibleProjectIds, isSystemAdmin } from '@/lib/permissions/project';
 
 type RowRecord = Record<string, unknown>;
@@ -237,4 +238,6 @@ export const GET = withAuth(async (request: NextRequest, { userId }) => {
     console.error('Presales focus summary API error:', error);
     return errorResponse('INTERNAL_ERROR', '获取售前负责人视图摘要失败');
   }
+}, {
+  requiredPermissions: [PERMISSIONS.DATASCREEN_VIEW],
 });

@@ -4,6 +4,7 @@ import { projects, users, customers, solutions } from '@/db/schema';
 import { sql, desc, count, sum, eq, and, gte, lte, isNull, or } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { withAuth } from '@/lib/auth-middleware';
+import { PERMISSIONS } from '@/lib/permissions';
 
 type RankType = 'staff' | 'customer' | 'project' | 'solution';
 
@@ -67,6 +68,8 @@ export const GET = withAuth(async (
     console.error('Failed to fetch rankings:', error);
     return errorResponse('INTERNAL_ERROR', '获取排行数据失败');
   }
+}, {
+  requiredPermissions: [PERMISSIONS.DATASCREEN_VIEW],
 });
 
 // 员工排行榜 - 修正：使用actualAmount，添加deletedAt过滤

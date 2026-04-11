@@ -140,13 +140,17 @@ export function SubSchemeManager({ solutionId, permissions }: SubSchemeManagerPr
       const res = await fetch(`/api/solutions/${solutionId}/sub-schemes`);
       if (res.ok) {
         const data = await res.json();
-        setSubSchemes(data.data || []);
+        const nextSubSchemes = data.data || [];
+        setSubSchemes(nextSubSchemes);
+        return nextSubSchemes;
       }
     } catch (error) {
       console.error('Failed to fetch sub-schemes:', error);
     } finally {
       setLoading(false);
     }
+
+    return [];
   };
 
   // 初始化标准子方案
@@ -166,7 +170,7 @@ export function SubSchemeManager({ solutionId, permissions }: SubSchemeManagerPr
           });
         }
       }
-      fetchSubSchemes();
+      await fetchSubSchemes();
       toast({ title: '初始化完成', description: '已创建标准子方案结构' });
     } catch (error) {
       console.error('Failed to initialize:', error);
@@ -193,7 +197,7 @@ export function SubSchemeManager({ solutionId, permissions }: SubSchemeManagerPr
         if (res.ok) {
           const data = await res.json();
           subSchemeId = data.data.id;
-          fetchSubSchemes();
+          await fetchSubSchemes();
         }
       } catch (error) {
         console.error('Failed to create sub-scheme:', error);
@@ -236,8 +240,8 @@ export function SubSchemeManager({ solutionId, permissions }: SubSchemeManagerPr
       const result = await res.json();
       if (res.ok && result.message) {
         toast({ title: '上传成功', description: '文件已上传' });
+        await fetchSubSchemes();
         setShowUploadDialog(false);
-        fetchSubSchemes();
       } else {
         // 显示具体的错误信息
         // error 可能是字符串或 { code, message } 对象
@@ -298,7 +302,7 @@ export function SubSchemeManager({ solutionId, permissions }: SubSchemeManagerPr
       
       if (res.ok) {
         toast({ title: '删除成功' });
-        fetchSubSchemes();
+        await fetchSubSchemes();
       } else {
         toast({ title: '删除失败', variant: 'destructive' });
       }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,9 @@ import {
   Plus,
   Eye,
   Edit,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Calendar,
   Briefcase,
   LayoutGrid,
@@ -73,6 +76,7 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react';
+import { matchCustomerName } from '@/lib/customer-name-dedup';
 
 interface Customer {
   id: number;
@@ -95,6 +99,22 @@ interface Customer {
   createdAt: string;
   updatedAt: string;
 }
+
+interface SimilarCustomerCandidate {
+  id: number;
+  customerId: string;
+  customerName: string;
+  customerType: string;
+  customerTypeCode?: string;
+  region: string;
+  contactName: string | null;
+  updatedAt: string | null;
+  matchType: 'exact' | 'similar';
+}
+
+type CustomerSortField = 'updatedAt' | 'lastInteractionTime' | 'totalAmount' | 'maxProjectAmount';
+type CustomerSortDirection = 'asc' | 'desc';
+type CustomerNameCheckStatus = 'checking' | 'exists' | 'similar' | 'available' | 'idle';
 
 export default function CustomersPage() {
   // 区域选项：除浙江省以外的所有省份 + 浙江省所有地市
@@ -160,6 +180,8 @@ export default function CustomersPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortField, setSortField] = useState<CustomerSortField>('updatedAt');
+  const [sortDirection, setSortDirection] = useState<CustomerSortDirection>('desc');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const itemsPerPage = 9;
@@ -192,14 +214,19 @@ export default function CustomersPage() {
   });
   const [submittingCustomer, setSubmittingCustomer] = useState(false);
   const [duplicateError, setDuplicateError] = useState('');
-  const [nameCheckStatus, setNameCheckStatus] = useState<'checking' | 'exists' | 'available' | 'idle'>('idle');
+  const [createNameCheckStatus, setCreateNameCheckStatus] = useState<CustomerNameCheckStatus>('idle');
+  const [editNameCheckStatus, setEditNameCheckStatus] = useState<CustomerNameCheckStatus>('idle');
+  const [createSimilarCustomers, setCreateSimilarCustomers] = useState<SimilarCustomerCandidate[]>([]);
+  const [editSimilarCustomers, setEditSimilarCustomers] = useState<SimilarCustomerCandidate[]>([]);
+  const [createSimilarConfirmed, setCreateSimilarConfirmed] = useState(false);
+  const [editSimilarConfirmed, setEditSimilarConfirmed] = useState(false);
 
   // 客户类型列表（从字典系统获取，用于显示映射）
   const [customerTypeList, setCustomerTypeList] = useState<{id: number; code: string; name: string; status: string}[]>([]);
 
   // 防抖检查客户名称
-  const checkNameTimeoutRef = useState<NodeJS.Timeout | null>(null)[0];
-  const setCheckNameTimeout = useState<NodeJS.Timeout | null>(null)[1];
+  const createNameCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editNameCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 导入客户相关
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -222,7 +249,7 @@ export default function CustomersPage() {
     if (customerTypeList.length > 0 || typeFilter === 'all') {
       fetchCustomers();
     }
-  }, [currentPage, statusFilter, typeFilter, customerTypeList.length]);
+  }, [currentPage, statusFilter, typeFilter, sortField, sortDirection, customerTypeList.length]);
 
   // 搜索防抖
   useEffect(() => {
@@ -234,6 +261,17 @@ export default function CustomersPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    return () => {
+      if (createNameCheckTimeoutRef.current) {
+        clearTimeout(createNameCheckTimeoutRef.current);
+      }
+      if (editNameCheckTimeoutRef.current) {
+        clearTimeout(editNameCheckTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const fetchCustomerTypesFromDict = async () => {
     try {
@@ -268,6 +306,8 @@ export default function CustomersPage() {
       
       queryParams.set('page', String(pageToUse));
       queryParams.set('pageSize', String(itemsPerPage));
+      queryParams.set('sortField', sortField);
+      queryParams.set('sortDirection', sortDirection);
       
       if (searchToUse) {
         queryParams.set('search', searchToUse);
@@ -308,10 +348,147 @@ export default function CustomersPage() {
     }
   };
 
-  // 检查客户名称是否重复
-  const checkCustomerNameDuplicate = (customerName: string): boolean => {
-    if (!Array.isArray(customers)) return false;
-    return customers.some(c => c.customerName === customerName);
+  const openExistingCustomerDetail = (customerId: number) => {
+    if (typeof window !== 'undefined') {
+      window.open(`/customers/${customerId}`, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    router.push(`/customers/${customerId}`);
+  };
+
+  const resetCreateNameCheck = () => {
+    setCreateNameCheckStatus('idle');
+    setCreateSimilarCustomers([]);
+    setCreateSimilarConfirmed(false);
+  };
+
+  const resetEditNameCheck = () => {
+    setEditNameCheckStatus('idle');
+    setEditSimilarCustomers([]);
+    setEditSimilarConfirmed(false);
+  };
+
+  const resolveNameCheckStatus = (matches: SimilarCustomerCandidate[]): CustomerNameCheckStatus => {
+    if (matches.some((customer) => customer.matchType === 'exact')) {
+      return 'exists';
+    }
+    if (matches.length > 0) {
+      return 'similar';
+    }
+    return 'available';
+  };
+
+  const fetchSimilarCustomers = async (customerName: string, excludeId?: number): Promise<SimilarCustomerCandidate[]> => {
+    const trimmedName = customerName.trim();
+    if (trimmedName.length < 2) {
+      return [];
+    }
+
+    const queryParams = new URLSearchParams({
+      similarTo: trimmedName,
+      similarLimit: '5',
+    });
+
+    if (excludeId) {
+      queryParams.set('excludeId', String(excludeId));
+    }
+
+    const response = await fetch(`/api/customers?${queryParams.toString()}`);
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error('FAILED_TO_QUERY_SIMILAR_CUSTOMERS');
+    }
+
+    return Array.isArray(result.data?.customers) ? result.data.customers : [];
+  };
+
+  const runCreateNameCheck = async (customerName: string) => {
+    const trimmedName = customerName.trim();
+    if (trimmedName.length < 2) {
+      resetCreateNameCheck();
+      return { status: 'idle' as CustomerNameCheckStatus, matches: [] as SimilarCustomerCandidate[] };
+    }
+
+    setCreateNameCheckStatus('checking');
+    const matches = await fetchSimilarCustomers(trimmedName);
+    const status = resolveNameCheckStatus(matches);
+    setCreateSimilarCustomers(matches);
+    setCreateNameCheckStatus(status);
+    return { status, matches };
+  };
+
+  const runEditNameCheck = async (customerName: string) => {
+    const trimmedName = customerName.trim();
+    const originalName = editingCustomer?.customerName?.trim() || '';
+
+    if (trimmedName.length < 2 || (originalName && matchCustomerName(trimmedName, originalName).matchType === 'exact')) {
+      resetEditNameCheck();
+      return { status: 'idle' as CustomerNameCheckStatus, matches: [] as SimilarCustomerCandidate[] };
+    }
+
+    setEditNameCheckStatus('checking');
+    const matches = await fetchSimilarCustomers(trimmedName, editingCustomer?.id);
+    const status = resolveNameCheckStatus(matches);
+    setEditSimilarCustomers(matches);
+    setEditNameCheckStatus(status);
+    return { status, matches };
+  };
+
+  const renderSimilarCustomerReminder = (
+    matches: SimilarCustomerCandidate[],
+    confirmed: boolean,
+    onConfirm: () => void,
+    onCancel: () => void,
+  ) => {
+    if (!matches.length) {
+      return null;
+    }
+
+    return (
+      <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3" data-testid="customer-similar-warning">
+        <div className="flex items-start gap-2 text-amber-900">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium">发现相似客户，请先确认是否重复</p>
+            <p className="text-xs">完全重复会被系统拦截；相似客户允许确认后继续保存。</p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {matches.map((customer) => (
+            <div key={customer.id} className="rounded border border-amber-200 bg-white p-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-medium text-foreground">{customer.customerName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {customer.region || '未填写地区'}
+                    {customer.customerType ? ` / ${customer.customerType}` : ''}
+                    {customer.contactName ? ` / 联系人：${customer.contactName}` : ''}
+                  </p>
+                </div>
+                <Badge variant={customer.matchType === 'exact' ? 'destructive' : 'secondary'}>
+                  {customer.matchType === 'exact' ? '完全重复' : '相似客户'}
+                </Badge>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">最近更新：{customer.updatedAt ? formatDate(customer.updatedAt) : '-'}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => openExistingCustomerDetail(customer.id)}>
+                  查看已有客户
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+            取消提交并返回编辑
+          </Button>
+          <Button type="button" size="sm" onClick={onConfirm} disabled={confirmed}>
+            {confirmed ? '已确认继续' : '继续创建新客户'}
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   // 处理新建客户提交
@@ -337,10 +514,16 @@ export default function CustomersPage() {
       return;
     }
 
-    // 检查客户名称重复（使用实时检查结果或重新检查）
-    if (nameCheckStatus === 'exists' || checkCustomerNameDuplicate(newCustomer.customerName.trim())) {
+    const createCheck = await runCreateNameCheck(newCustomer.customerName);
+    if (createCheck.status === 'exists') {
       setDuplicateError('客户名称已存在，请确认是否重复');
-      setNameCheckStatus('exists');
+      setCreateNameCheckStatus('exists');
+      setCreateSimilarConfirmed(false);
+      return;
+    }
+
+    if (createCheck.status === 'similar' && !createSimilarConfirmed) {
+      setDuplicateError('发现相似客户，请确认后再继续创建');
       return;
     }
 
@@ -411,7 +594,7 @@ export default function CustomersPage() {
           description: ''
         });
         // 重置检查状态
-        setNameCheckStatus('idle');
+        resetCreateNameCheck();
         setDuplicateError('');
         // 关闭对话框
         setAddCustomerDialogOpen(false);
@@ -558,7 +741,7 @@ export default function CustomersPage() {
     });
     // 重置检查状态，避免编辑时显示重名错误
     setDuplicateError('');
-    setNameCheckStatus('idle');
+    resetEditNameCheck();
     setEditCustomerDialogOpen(true);
   };
 
@@ -587,16 +770,18 @@ export default function CustomersPage() {
       return;
     }
 
-    // 检查客户名称重复（排除当前客户）
-    const isDuplicate = customers.some(
-      c => c.customerName === editCustomer.customerName.trim() && c.id !== editingCustomer.id
-    );
-    if (isDuplicate) {
+    const editCheck = await runEditNameCheck(editCustomer.customerName);
+    if (editCheck.status === 'exists') {
       toast({
         variant: 'destructive',
         title: '验证失败',
         description: '客户名称已存在，请确认是否重复',
       });
+      return;
+    }
+
+    if (editCheck.status === 'similar' && !editSimilarConfirmed) {
+      setDuplicateError('发现相似客户，请确认后再保存修改');
       return;
     }
 
@@ -658,6 +843,7 @@ export default function CustomersPage() {
         // 关闭对话框
         setEditCustomerDialogOpen(false);
         setEditingCustomer(null);
+        resetEditNameCheck();
         toast({
           title: '操作成功',
           description: '客户信息更新成功！',
@@ -740,6 +926,38 @@ export default function CustomersPage() {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleDateString('zh-CN');
   };
+
+  const handleSortChange = (field: CustomerSortField) => {
+    setCurrentPage(1);
+    if (sortField === field) {
+      setSortDirection((current) => (current === 'desc' ? 'asc' : 'desc'));
+      return;
+    }
+
+    setSortField(field);
+    setSortDirection(field === 'updatedAt' ? 'desc' : 'asc');
+  };
+
+  const renderSortIcon = (field: CustomerSortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+    }
+
+    return sortDirection === 'desc'
+      ? <ArrowDown className="h-3.5 w-3.5" />
+      : <ArrowUp className="h-3.5 w-3.5" />;
+  };
+
+  const renderSortHeader = (label: string, field: CustomerSortField, align: 'left' | 'right' = 'left') => (
+    <button
+      type="button"
+      className={`inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground ${align === 'right' ? 'ml-auto' : ''}`}
+      onClick={() => handleSortChange(field)}
+    >
+      <span>{label}</span>
+      {renderSortIcon(field)}
+    </button>
+  );
 
   // 分页计算（使用后端返回的总数）
   const totalPages = Math.ceil(totalCount / itemsPerPage);
@@ -974,7 +1192,7 @@ export default function CustomersPage() {
               if (!open) {
                 // 弹窗关闭时重置状态
                 setDuplicateError('');
-                setNameCheckStatus('idle');
+                resetCreateNameCheck();
                 setNewCustomer({
                   customerName: '',
                   customerType: '',
@@ -1018,38 +1236,45 @@ export default function CustomersPage() {
                         const value = e.target.value;
                         setNewCustomer({ ...newCustomer, customerName: value });
                         setDuplicateError('');
+                        setCreateSimilarConfirmed(false);
                         
                         // 实时检查客户名称
                         if (value.trim().length >= 2) {
-                          setNameCheckStatus('checking');
+                          setCreateNameCheckStatus('checking');
                           // 清除之前的定时器
-                          if (checkNameTimeoutRef) {
-                            clearTimeout(checkNameTimeoutRef);
+                          if (createNameCheckTimeoutRef.current) {
+                            clearTimeout(createNameCheckTimeoutRef.current);
                           }
                           // 设置新的防抖检查
-                          const timeout = setTimeout(() => {
-                            const exists = checkCustomerNameDuplicate(value.trim());
-                            setNameCheckStatus(exists ? 'exists' : 'available');
+                          createNameCheckTimeoutRef.current = setTimeout(() => {
+                            runCreateNameCheck(value).catch(() => {
+                              resetCreateNameCheck();
+                            });
                           }, 500);
-                          setCheckNameTimeout(timeout);
                         } else {
-                          setNameCheckStatus('idle');
+                          resetCreateNameCheck();
                         }
                       }}
-                      className={nameCheckStatus === 'exists' ? 'border-red-500 focus-visible:ring-red-500' : 
-                                 nameCheckStatus === 'available' ? 'border-green-500 focus-visible:ring-green-500' : ''}
+                      className={createNameCheckStatus === 'exists' ? 'border-red-500 focus-visible:ring-red-500' : 
+                                 createNameCheckStatus === 'similar' ? 'border-amber-500 focus-visible:ring-amber-500' :
+                                 createNameCheckStatus === 'available' ? 'border-green-500 focus-visible:ring-green-500' : ''}
                     />
-                    {nameCheckStatus === 'checking' && (
+                    {createNameCheckStatus === 'checking' && (
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
                         <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
                       </div>
                     )}
-                    {nameCheckStatus === 'exists' && (
+                    {createNameCheckStatus === 'exists' && (
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500">
                         <AlertCircle className="h-4 w-4" />
                       </div>
                     )}
-                    {nameCheckStatus === 'available' && (
+                    {createNameCheckStatus === 'similar' && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-500">
+                        <AlertCircle className="h-4 w-4" />
+                      </div>
+                    )}
+                    {createNameCheckStatus === 'available' && (
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500">
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1057,14 +1282,28 @@ export default function CustomersPage() {
                       </div>
                     )}
                   </div>
-                  {nameCheckStatus === 'exists' && (
+                  {createNameCheckStatus === 'exists' && (
                     <p className="text-xs text-red-500">客户名称已存在，请确认是否重复</p>
                   )}
-                  {nameCheckStatus === 'available' && (
+                  {createNameCheckStatus === 'similar' && (
+                    <p className="text-xs text-amber-600">发现相似客户，确认后仍可继续创建</p>
+                  )}
+                  {createNameCheckStatus === 'available' && (
                     <p className="text-xs text-green-500">客户名称可用</p>
                   )}
-                  {nameCheckStatus === 'idle' && (
+                  {createNameCheckStatus === 'idle' && (
                     <p className="text-xs text-muted-foreground">客户编号将由系统自动生成</p>
+                  )}
+                  {renderSimilarCustomerReminder(
+                    createSimilarCustomers,
+                    createSimilarConfirmed,
+                    () => {
+                      setCreateSimilarConfirmed(true);
+                      setDuplicateError('');
+                    },
+                    () => {
+                      setCreateSimilarConfirmed(false);
+                    },
                   )}
                 </div>
 
@@ -1184,7 +1423,7 @@ export default function CustomersPage() {
                       description: ''
                     });
                     setDuplicateError('');
-                    setNameCheckStatus('idle');
+                    resetCreateNameCheck();
                   }}
                 >
                   取消
@@ -1203,7 +1442,7 @@ export default function CustomersPage() {
               // 弹窗关闭时重置状态
               setEditingCustomer(null);
               setDuplicateError('');
-              setNameCheckStatus('idle');
+              resetEditNameCheck();
             }
           }}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="customer-edit-dialog">
@@ -1220,8 +1459,49 @@ export default function CustomersPage() {
                     id="edit-customerName"
                     placeholder="请输入客户名称"
                     value={editCustomer.customerName}
-                    onChange={(e) => setEditCustomer({ ...editCustomer, customerName: e.target.value })}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setEditCustomer({ ...editCustomer, customerName: value });
+                      setDuplicateError('');
+                      setEditSimilarConfirmed(false);
+
+                      if (editNameCheckTimeoutRef.current) {
+                        clearTimeout(editNameCheckTimeoutRef.current);
+                      }
+
+                      if (value.trim().length < 2) {
+                        resetEditNameCheck();
+                        return;
+                      }
+
+                      editNameCheckTimeoutRef.current = setTimeout(() => {
+                        runEditNameCheck(value).catch(() => {
+                          resetEditNameCheck();
+                        });
+                      }, 500);
+                    }}
+                    className={editNameCheckStatus === 'exists' ? 'border-red-500 focus-visible:ring-red-500' : editNameCheckStatus === 'similar' ? 'border-amber-500 focus-visible:ring-amber-500' : editNameCheckStatus === 'available' ? 'border-green-500 focus-visible:ring-green-500' : ''}
                   />
+                  {editNameCheckStatus === 'exists' && (
+                    <p className="text-xs text-red-500">客户名称已存在，请确认是否重复</p>
+                  )}
+                  {editNameCheckStatus === 'similar' && (
+                    <p className="text-xs text-amber-600">发现相似客户，确认后仍可继续保存</p>
+                  )}
+                  {editNameCheckStatus === 'available' && (
+                    <p className="text-xs text-green-500">当前名称未发现重复或相似客户</p>
+                  )}
+                  {renderSimilarCustomerReminder(
+                    editSimilarCustomers,
+                    editSimilarConfirmed,
+                    () => {
+                      setEditSimilarConfirmed(true);
+                      setDuplicateError('');
+                    },
+                    () => {
+                      setEditSimilarConfirmed(false);
+                    },
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -1436,10 +1716,10 @@ export default function CustomersPage() {
                       <TableHead>客户类型</TableHead>
                       <TableHead>区域</TableHead>
                       <TableHead>状态</TableHead>
-                      <TableHead className="text-right">历史中标总额</TableHead>
+                      <TableHead className="text-right">{renderSortHeader('历史中标总额', 'totalAmount', 'right')}</TableHead>
                       <TableHead className="text-right">当前跟进项目数</TableHead>
-                      <TableHead>最近互动时间</TableHead>
-                      <TableHead className="text-right">历史最大中标金额</TableHead>
+                      <TableHead>{renderSortHeader('最近互动时间', 'lastInteractionTime')}</TableHead>
+                      <TableHead className="text-right">{renderSortHeader('历史最大中标金额', 'maxProjectAmount', 'right')}</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1447,7 +1727,7 @@ export default function CustomersPage() {
                     {paginatedCustomers.map((customer) => (
                       <TableRow 
                         key={customer.id}
-                        onDoubleClick={() => openCustomerDetail(customer)}
+                        onClick={() => openCustomerDetail(customer)}
                         className="cursor-pointer hover:bg-muted/50"
                         data-testid={`customer-row-${customer.id}`}
                       >
@@ -1468,7 +1748,7 @@ export default function CustomersPage() {
                         <TableCell>
                           <div className="flex items-center gap-1 text-sm text-muted-foreground">
                             <Calendar className="h-3 w-3" />
-                            {formatDate(customer.lastInteractionTime || customer.lastCooperationDate)}
+                            {formatDate(customer.lastInteractionTime)}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
@@ -1513,7 +1793,7 @@ export default function CustomersPage() {
                   {paginatedCustomers.map((customer) => (
                     <Card 
                       key={customer.id}
-                      onDoubleClick={() => openCustomerDetail(customer)}
+                      onClick={() => openCustomerDetail(customer)}
                       className="hover:shadow-md transition-shadow cursor-pointer"
                     >
                       <CardHeader className="pb-3">
@@ -1571,7 +1851,7 @@ export default function CustomersPage() {
                           <div className="space-y-1">
                             <div className="text-xs text-muted-foreground">最近互动</div>
                             <div className="text-sm font-medium">
-                              {formatDate(customer.lastInteractionTime || customer.lastCooperationDate)}
+                              {formatDate(customer.lastInteractionTime)}
                             </div>
                           </div>
                         </div>
@@ -1757,7 +2037,7 @@ export default function CustomersPage() {
                         <div className="text-sm text-muted-foreground">最近互动时间</div>
                         <div className="font-semibold text-lg flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
-                          {formatDate(selectedCustomer.lastInteractionTime || selectedCustomer.lastCooperationDate)}
+                          {formatDate(selectedCustomer.lastInteractionTime)}
                         </div>
                       </div>
                     </CardContent>

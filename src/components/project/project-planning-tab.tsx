@@ -37,6 +37,7 @@ import { ProjectSolutions } from '@/components/project/project-solutions';
 import { UserSelect } from '@/components/ui/user-select';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/auth-context';
 import { 
   Users, 
   Plus, 
@@ -94,6 +95,8 @@ interface ProjectPlanningTabProps {
 
 export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembers = !readOnly, onSolutionChange }: ProjectPlanningTabProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const defaultFollowType = '电话';
   
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
@@ -112,10 +115,10 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
   const [addFollowDialogOpen, setAddFollowDialogOpen] = useState(false);
   const [addingFollow, setAddingFollow] = useState(false);
   const [newFollow, setNewFollow] = useState({
-    followerId: null as number | null,
-    followerName: '',
+    followerId: user?.id ?? null as number | null,
+    followerName: user?.realName || '',
     followTime: new Date().toISOString().slice(0, 16),
-    followType: '',
+    followType: defaultFollowType,
     followContent: '',
     attachment: null as File | null,
     isBusinessTrip: false,
@@ -125,6 +128,18 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
   });
   
   const FOLLOWS_PER_PAGE = 5;
+  const followMemberOptions = teamMembers.length > 0
+    ? teamMembers
+    : user
+      ? [{
+          id: user.id,
+          memberId: user.id,
+          userId: user.id,
+          name: user.realName,
+          role: '当前用户',
+          roleCode: 'self',
+        } satisfies TeamMember]
+      : [];
   
   useEffect(() => {
     fetchTeamMembers();
@@ -152,20 +167,31 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
         }));
         setTeamMembers(teamMemberList);
         
-        // 设置默认跟进人（优先选择负责人）
-        if (teamMemberList.length > 0) {
-          const manager = teamMemberList.find(m => m.roleCode === 'manager') || teamMemberList[0];
-          setNewFollow(prev => ({ 
-            ...prev, 
-            followerId: manager.userId,
-            followerName: manager.name 
-          }));
-        }
+        const defaultFollower = teamMemberList.find(m => m.roleCode === 'manager') || teamMemberList[0];
+        setNewFollow(prev => ({ 
+          ...prev,
+          followerId: defaultFollower?.userId ?? prev.followerId ?? user?.id ?? null,
+          followerName: defaultFollower?.name || prev.followerName || user?.realName || '',
+          followType: prev.followType || defaultFollowType,
+        }));
       }
     } catch (error) {
       console.error('Failed to fetch team members:', error);
     }
   };
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    setNewFollow(prev => ({
+      ...prev,
+      followerId: prev.followerId ?? user.id,
+      followerName: prev.followerName || user.realName,
+      followType: prev.followType || defaultFollowType,
+    }));
+  }, [user]);
   
   const fetchUsers = async () => {
     try {
@@ -328,10 +354,10 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
         // 重置表单，默认选择第一个团队成员（优先负责人）
         const defaultMember = teamMembers.find(m => m.roleCode === 'manager') || teamMembers[0];
         setNewFollow({
-          followerId: defaultMember?.userId || null,
-          followerName: defaultMember?.name || '',
+          followerId: defaultMember?.userId || user?.id || null,
+          followerName: defaultMember?.name || user?.realName || '',
           followTime: new Date().toISOString().slice(0, 16),
-          followType: '',
+          followType: defaultFollowType,
           followContent: '',
           attachment: null,
           isBusinessTrip: false,
@@ -649,7 +675,7 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
                   value={newFollow.followerId?.toString() || ''}
                   onValueChange={(value) => {
                     const numericValue = value ? Number(value) : null;
-                    const member = teamMembers.find(m => m.userId === numericValue);
+                    const member = followMemberOptions.find(m => m.userId === numericValue);
                     setNewFollow({ 
                       ...newFollow, 
                       followerId: numericValue,
@@ -658,15 +684,15 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
                   }}
                 >
                   <SelectTrigger data-testid="planning-follow-follower-trigger">
-                    <SelectValue placeholder={teamMembers.length === 0 ? "请先添加团队成员" : "选择跟进人"} />
+                    <SelectValue placeholder={followMemberOptions.length === 0 ? "请先添加团队成员" : "选择跟进人"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {teamMembers.length === 0 ? (
+                    {followMemberOptions.length === 0 ? (
                       <div className="px-2 py-4 text-sm text-muted-foreground text-center">
                         暂无团队成员，请先添加
                       </div>
                     ) : (
-                      teamMembers.map((member) => (
+                      followMemberOptions.map((member) => (
                         <SelectItem key={member.userId} value={member.userId.toString()}>
                           {member.name}
                           {member.role && (

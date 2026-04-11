@@ -6,6 +6,19 @@ import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { canWriteProject, isSystemAdmin } from '@/lib/permissions/project';
 
+function normalizeProposalProgress(status: string | null | undefined, progress: unknown) {
+  if (status === 'completed') {
+    return 100;
+  }
+
+  const numericProgress = Number(progress);
+  if (Number.isNaN(numericProgress)) {
+    return 0;
+  }
+
+  return Math.min(100, Math.max(0, numericProgress));
+}
+
 // GET - 获取投标方案列表
 export const GET = withAuth(async (
   request: NextRequest,
@@ -57,8 +70,10 @@ export const POST = withAuth(async (
     const { name, type, status, progress, deadline, notes } = body;
 
     if (!name) {
-      return errorResponse('BAD_REQUEST', '请填写方案名称');
+      return errorResponse('BAD_REQUEST', '请填写标书名称');
     }
+
+    const normalizedStatus = status || 'draft';
 
     const [proposal] = await db
       .insert(biddingProposals)
@@ -66,8 +81,8 @@ export const POST = withAuth(async (
         projectId,
         name,
         type: type || null,
-        status: status || 'draft',
-        progress: progress || 0,
+        status: normalizedStatus,
+        progress: normalizeProposalProgress(normalizedStatus, progress),
         ownerId: context.userId,
         deadline: deadline || null,
         notes: notes || null,

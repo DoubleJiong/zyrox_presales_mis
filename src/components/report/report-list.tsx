@@ -71,6 +71,8 @@ const REPORT_TYPE_COLORS: Record<string, string> = {
 
 interface ReportListProps {
   reports: WeeklyReportItem[];
+  currentUserId?: number | null;
+  managementView?: boolean;
   onView?: (report: WeeklyReportItem) => void;
   onEdit?: (report: WeeklyReportItem) => void;
   onDelete?: (reportId: number) => void;
@@ -79,6 +81,8 @@ interface ReportListProps {
 
 export function ReportList({
   reports,
+  currentUserId = null,
+  managementView = false,
   onView,
   onEdit,
   onDelete,
@@ -102,6 +106,7 @@ export function ReportList({
         <TableHeader>
           <TableRow>
             <TableHead className="w-20">类型</TableHead>
+            {managementView ? <TableHead className="w-32">汇报人</TableHead> : null}
             <TableHead className="w-40">周次</TableHead>
             <TableHead>摘要</TableHead>
             <TableHead className="w-24">状态</TableHead>
@@ -110,73 +115,89 @@ export function ReportList({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {reports.map((report) => (
-            <TableRow key={report.id} className="cursor-pointer hover:bg-muted/50">
-              <TableCell>
-                <Badge className={cn('text-xs', REPORT_TYPE_COLORS[report.type] || 'bg-muted')}>
-                  {REPORT_TYPE_LABELS[report.type] || report.type}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">
-                    {formatDateRange(report.weekStart, report.weekEnd)}
-                  </span>
-                </div>
-              </TableCell>
-              <TableCell>
-                <div className="max-w-md">
-                  <p className="text-sm truncate">{report.content.summary}</p>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    <span>任务: {report.content.statistics.taskCompleted}</span>
-                    <span>客户: {report.content.statistics.newCustomers}</span>
-                    <span>商机: {report.content.statistics.opportunityCount}</span>
+          {reports.map((report) => {
+            const canMutateRecord = report.type !== 'personal' || report.userId === null || report.userId === currentUserId;
+
+            return (
+              <TableRow key={report.id} className="cursor-pointer hover:bg-muted/50">
+                <TableCell>
+                  <Badge className={cn('text-xs', REPORT_TYPE_COLORS[report.type] || 'bg-muted')}>
+                    {REPORT_TYPE_LABELS[report.type] || report.type}
+                  </Badge>
+                </TableCell>
+                {managementView ? (
+                  <TableCell>
+                    <div className="flex items-center gap-2 text-sm">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span>{report.userName || '系统汇总'}</span>
+                    </div>
+                  </TableCell>
+                ) : null}
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">
+                      {formatDateRange(report.weekStart, report.weekEnd)}
+                    </span>
                   </div>
-                </div>
-              </TableCell>
-              <TableCell>
-                {report.sent ? (
-                  <Badge variant="outline" className="text-success border-success">
-                    已发送
-                  </Badge>
-                ) : (
-                  <Badge variant="outline">
-                    未发送
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {formatDateTime(report.generatedAt)}
-              </TableCell>
-              <TableCell>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => onView?.(report)}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      查看
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onEdit?.(report)}>
-                      <Pencil className="h-4 w-4 mr-2" />
-                      编辑
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      className="text-destructive"
-                      onClick={() => onDelete?.(report.id)}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      删除
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
-            </TableRow>
-          ))}
+                </TableCell>
+                <TableCell>
+                  <div className="max-w-md">
+                    <p className="text-sm truncate">{report.content.summary}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span>任务: {report.content.statistics.taskCompleted}</span>
+                      <span>客户: {report.content.statistics.newCustomers}</span>
+                      <span>商机: {report.content.statistics.opportunityCount}</span>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {report.sent ? (
+                    <Badge variant="outline" className="text-success border-success">
+                      已发送
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">
+                      未发送
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {formatDateTime(report.generatedAt)}
+                </TableCell>
+                <TableCell>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={`周报操作-${report.id}`}>
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => onView?.(report)}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        查看
+                      </DropdownMenuItem>
+                      {canMutateRecord ? (
+                        <DropdownMenuItem onClick={() => onEdit?.(report)}>
+                          <Pencil className="h-4 w-4 mr-2" />
+                          编辑
+                        </DropdownMenuItem>
+                      ) : null}
+                      {canMutateRecord ? (
+                        <DropdownMenuItem 
+                          className="text-destructive"
+                          onClick={() => onDelete?.(report.id)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          删除
+                        </DropdownMenuItem>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

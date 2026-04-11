@@ -1,9 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { users, projects, tasks, workLogs } from '@/db/schema';
+import { users, projects, tasks, workLogs, weeklyReports } from '@/db/schema';
 import { desc, eq, and, sql, gte, lte, isNotNull } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
+import { canViewGlobalDashboard } from '@/shared/policy/dashboard-policy';
+
+type SavedWeeklyReportContent = {
+  summary: string;
+  statistics: {
+    newCustomers: number;
+    followUpCount: number;
+    projectProgress: number;
+    taskCompleted: number;
+    opportunityCount: number;
+    biddingCount: number;
+  };
+  highlights: string[];
+  nextWeekPlan: string[];
+  issues: string[];
+  supportNeeds: string[];
+};
+
+type WeeklyReportUserSummary = {
+  realName?: string | null;
+};
+
+function normalizeWeeklyReportUser(value: unknown): WeeklyReportUserSummary | null {
+  if (!value) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    const firstUser = value[0];
+    return firstUser && typeof firstUser === 'object' ? firstUser as WeeklyReportUserSummary : null;
+  }
+
+  return typeof value === 'object' ? value as WeeklyReportUserSummary : null;
+}
 
 // 辅助函数：获取周一
 function getMonday(date: Date): Date {
@@ -20,6 +54,185 @@ function getSunday(monday: Date): Date {
   return d;
 }
 
+function getIsoWeekRange(year: number, week: number) {
+  const januaryFourth = new Date(Date.UTC(year, 0, 4));
+  const januaryFourthDay = januaryFourth.getUTCDay() || 7;
+  const monday = new Date(januaryFourth);
+
+  monday.setUTCDate(januaryFourth.getUTCDate() - januaryFourthDay + 1 + ((week - 1) * 7));
+
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+
+  return {
+    monday: new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate())),
+    sunday: new Date(Date.UTC(sunday.getUTCFullYear(), sunday.getUTCMonth(), sunday.getUTCDate())),
+  };
+}
+
+function toIsoDateString(value: string | Date) {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return value.toISOString().split('T')[0];
+}
+
+function toIsoDateTimeString(value: string | Date | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return value.toISOString();
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+}
+
+function calculateAverageProjectProgress(
+  inProgressTasks: Array<{ progress: number | null }>,
+) {
+  const validProgress = inProgressTasks
+    .map((task) => task.progress)
+    .filter((value): value is number => typeof value === 'number');
+
+  if (validProgress.length === 0) {
+    return 0;
+  }
+
+  return Math.round(validProgress.reduce((sum, value) => sum + value, 0) / validProgress.length);
+}
+
+function buildWeeklyReportContent(
+  report: Awaited<ReturnType<typeof generateWeeklyReport>>,
+  overrideContent?: unknown,
+): SavedWeeklyReportContent {
+  const defaultContent: SavedWeeklyReportContent = {
+    summary: report.generatedContent,
+    statistics: {
+      newCustomers: 0,
+      followUpCount: report.workLogs.filter((log) => log.type === 'followup').length,
+      projectProgress: calculateAverageProjectProgress(report.inProgressTasks),
+      taskCompleted: report.statistics.tasksCompleted,
+      opportunityCount: 0,
+      biddingCount: report.workLogs.filter((log) => log.type === 'bidding').length,
+    },
+    highlights: report.completedTasks.slice(0, 5).map((task) => task.project ? `${task.name}（${task.project}）` : task.name),
+    nextWeekPlan: [],
+    issues: [],
+    supportNeeds: [],
+  };
+
+  if (typeof overrideContent === 'string') {
+    return {
+      ...defaultContent,
+      summary: overrideContent.trim() || defaultContent.summary,
+    };
+  }
+
+  if (!overrideContent || typeof overrideContent !== 'object') {
+    return defaultContent;
+  }
+
+  const content = overrideContent as Partial<SavedWeeklyReportContent> & {
+    statistics?: Partial<SavedWeeklyReportContent['statistics']>;
+  };
+
+  return {
+    summary: typeof content.summary === 'string' && content.summary.trim().length > 0
+      ? content.summary
+      : defaultContent.summary,
+    statistics: {
+      ...defaultContent.statistics,
+      ...(content.statistics ?? {}),
+    },
+    highlights: toStringArray(content.highlights).length > 0 ? toStringArray(content.highlights) : defaultContent.highlights,
+    nextWeekPlan: toStringArray(content.nextWeekPlan),
+    issues: toStringArray(content.issues),
+    supportNeeds: toStringArray(content.supportNeeds),
+  };
+}
+
+async function upsertWeeklyReportRecord(params: {
+  type: 'personal' | 'global';
+  userId: number | null;
+  weekStart: string;
+  weekEnd: string;
+  content: SavedWeeklyReportContent;
+}) {
+  const existingReport = await db.query.weeklyReports.findFirst({
+    where: and(
+      eq(weeklyReports.type, params.type),
+      eq(weeklyReports.userId, params.userId),
+      eq(weeklyReports.weekStart, params.weekStart),
+    ),
+  });
+
+  if (existingReport) {
+    const [updatedReport] = await db
+      .update(weeklyReports)
+      .set({
+        weekEnd: params.weekEnd,
+        content: params.content,
+        generatedAt: new Date(),
+      })
+      .where(eq(weeklyReports.id, existingReport.id))
+      .returning();
+
+    return updatedReport;
+  }
+
+  const [createdReport] = await db
+    .insert(weeklyReports)
+    .values({
+      type: params.type,
+      userId: params.userId,
+      weekStart: params.weekStart,
+      weekEnd: params.weekEnd,
+      content: params.content,
+    })
+    .returning();
+
+  return createdReport;
+}
+
+function mapStoredWeeklyReport(record: {
+  id: number;
+  type: string;
+  userId: number | null;
+  weekStart: string | Date;
+  weekEnd: string | Date;
+  content: SavedWeeklyReportContent;
+  generatedAt: string | Date;
+  sentAt: string | Date | null;
+  sent: boolean | null;
+  user?: unknown;
+}) {
+  const user = normalizeWeeklyReportUser(record.user);
+
+  return {
+    id: record.id,
+    type: record.type,
+    userId: record.userId,
+    userName: user?.realName || null,
+    weekStart: toIsoDateString(record.weekStart),
+    weekEnd: toIsoDateString(record.weekEnd),
+    content: record.content,
+    generatedAt: toIsoDateTimeString(record.generatedAt),
+    sentAt: toIsoDateTimeString(record.sentAt),
+    sent: Boolean(record.sent),
+  };
+}
+
 /**
  * GET /api/reports/weekly - 获取周报列表/生成周报
  */
@@ -32,9 +245,36 @@ export const GET = withAuth(async (
     const type = searchParams.get('type') || 'personal';
     const year = searchParams.get('year');
     const week = searchParams.get('week');
+    const reportWeek = searchParams.get('reportWeek');
+    const requestedUserId = searchParams.get('userId');
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '20');
     const userId = context.userId;
+    const hasGlobalScope = canViewGlobalDashboard(context.user);
+    const filterUserId = requestedUserId ? parseInt(requestedUserId, 10) : null;
+    const filterReportWeek = reportWeek ? parseInt(reportWeek, 10) : null;
+
+    if (requestedUserId && (Number.isNaN(filterUserId) || filterUserId <= 0)) {
+      return errorResponse('BAD_REQUEST', '筛选人员无效', { status: 400 });
+    }
+
+    if (reportWeek && (Number.isNaN(filterReportWeek) || filterReportWeek <= 0 || filterReportWeek > 53)) {
+      return errorResponse('BAD_REQUEST', '筛选周次无效', { status: 400 });
+    }
+
+    if (filterUserId && !hasGlobalScope && filterUserId !== userId) {
+      return errorResponse('FORBIDDEN', '无权按其他人员筛选周报', { status: 403 });
+    }
+
+    // 如果指定了自定义日期范围，直接生成报告
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    if (startDate && endDate) {
+      const monday = new Date(startDate + 'T00:00:00.000Z');
+      const sunday = new Date(endDate + 'T23:59:59.999Z');
+      const report = await generateWeeklyReport(userId, 0, 0, { monday, sunday });
+      return successResponse(report);
+    }
 
     // 如果指定了周数，生成该周的周报内容
     if (week) {
@@ -44,40 +284,54 @@ export const GET = withAuth(async (
       return successResponse(report);
     }
 
-    // 否则返回最近几周的周报摘要
-    const today = new Date();
-    const reports = [];
+    const allReports = await db.query.weeklyReports.findMany({
+      with: {
+        user: {
+          columns: {
+            realName: true,
+          },
+        },
+      },
+      orderBy: [desc(weeklyReports.generatedAt), desc(weeklyReports.id)],
+    });
 
-    for (let i = 0; i < pageSize; i++) {
-      const monday = getMonday(new Date(today.getTime() - i * 7 * 24 * 60 * 60 * 1000));
-      const sunday = getSunday(monday);
-      const weekNum = getWeekNumber(monday);
-      const yearNum = monday.getFullYear();
+    const filteredReports = allReports.filter((report) => {
+      if (type && report.type !== type) {
+        return false;
+      }
 
-      if (year && yearNum !== parseInt(year)) continue;
+      if (!hasGlobalScope && report.type === 'personal' && report.userId !== userId) {
+        return false;
+      }
 
-      const summary = await getWeekSummary(userId, monday, sunday);
+      if (filterUserId && report.userId !== filterUserId) {
+        return false;
+      }
 
-      reports.push({
-        id: `week-${yearNum}-${weekNum}`,
-        type: 'personal',
-        userId,
-        userName: context.user?.realName || '用户',
-        year: yearNum,
-        week: weekNum,
-        weekStart: monday.toISOString().split('T')[0],
-        weekEnd: sunday.toISOString().split('T')[0],
-        summary,
-        generatedAt: new Date().toISOString(),
-      });
-    }
+      if (filterReportWeek) {
+        const reportWeekNumber = getWeekNumber(new Date(toIsoDateString(report.weekStart)));
+        if (reportWeekNumber !== filterReportWeek) {
+          return false;
+        }
+      }
+
+      if (!year) {
+        return true;
+      }
+
+      const reportYear = new Date(toIsoDateString(report.weekStart)).getFullYear();
+      return reportYear === parseInt(year);
+    });
+
+    const pagedReports = filteredReports.slice((page - 1) * pageSize, page * pageSize);
+    const reports = pagedReports.map(mapStoredWeeklyReport);
 
     return successResponse({
       reports,
       pagination: {
         page,
         pageSize,
-        total: reports.length,
+        total: filteredReports.length,
       },
     });
   } catch (error) {
@@ -87,7 +341,7 @@ export const GET = withAuth(async (
 });
 
 /**
- * POST /api/reports/weekly - 生成并发送周报
+ * POST /api/reports/weekly - 生成并保存周报
  */
 export const POST = withAuth(async (
   request: NextRequest,
@@ -97,14 +351,36 @@ export const POST = withAuth(async (
     const userId = context.userId;
     const body = await request.json();
     
-    const { year, week } = body;
+    const { year, week, content } = body;
+    const type = body.type === 'global' ? 'global' : 'personal';
 
     const yearNum = year || new Date().getFullYear();
     const weekNum = week || getWeekNumber(new Date());
 
-    const report = await generateWeeklyReport(userId, yearNum, weekNum);
+    const generatedReport = await generateWeeklyReport(userId, yearNum, weekNum);
+    const structuredContent = buildWeeklyReportContent(generatedReport, content);
+    const savedReport = await upsertWeeklyReportRecord({
+      type,
+      userId: type === 'personal' ? userId : null,
+      weekStart: generatedReport.weekInfo.weekStart,
+      weekEnd: generatedReport.weekInfo.weekEnd,
+      content: structuredContent,
+    });
 
-    return successResponse(report);
+    return successResponse({
+      ...generatedReport,
+      id: savedReport.id,
+      type: savedReport.type,
+      userId: savedReport.userId,
+      userName: context.user?.realName || generatedReport.userName,
+      weekStart: toIsoDateString(savedReport.weekStart),
+      weekEnd: toIsoDateString(savedReport.weekEnd),
+      content: structuredContent,
+      generatedAt: toIsoDateTimeString(savedReport.generatedAt),
+      sentAt: toIsoDateTimeString(savedReport.sentAt),
+      sent: Boolean(savedReport.sent),
+      generatedContent: structuredContent.summary,
+    });
   } catch (error) {
     console.error('Failed to generate weekly report:', error);
     return errorResponse('INTERNAL_ERROR', '生成周报失败');
@@ -163,14 +439,17 @@ async function getWeekSummary(userId: number, startDate: Date, endDate: Date) {
 }
 
 // 生成完整周报
-async function generateWeeklyReport(userId: number, year: number, week: number) {
-  // 计算该周的日期范围
-  const januaryFirst = new Date(year, 0, 1);
-  const daysOffset = (week - 1) * 7;
-  const monday = new Date(januaryFirst);
-  monday.setDate(januaryFirst.getDate() + daysOffset + (januaryFirst.getDay() <= 1 ? 1 - januaryFirst.getDay() : 8 - januaryFirst.getDay()));
-  const sunday = getSunday(monday);
-
+async function generateWeeklyReport(
+  userId: number,
+  year: number,
+  week: number,
+  dateOverride?: { monday: Date; sunday: Date },
+) {
+  // 按 ISO 周规则计算该周日期范围，避免 year/week 与实际周起止错位。
+  const { monday, sunday } = dateOverride ?? getIsoWeekRange(year, week);
+  // 对外展示信息：自定义范围时用实际日期，周报时用规范周数
+  const displayYear = dateOverride ? monday.getUTCFullYear() : year;
+  const displayWeek = dateOverride ? getWeekNumber(monday) : week;
   // 获取用户信息
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
@@ -230,8 +509,8 @@ async function generateWeeklyReport(userId: number, year: number, week: number) 
 
   // 构建周报内容
   const weekInfo = {
-    year,
-    week,
+    year: displayYear,
+    week: displayWeek,
     weekStart: monday.toISOString().split('T')[0],
     weekEnd: sunday.toISOString().split('T')[0],
   };

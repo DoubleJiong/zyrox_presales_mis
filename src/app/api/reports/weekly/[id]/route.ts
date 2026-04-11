@@ -4,6 +4,75 @@ import { weeklyReports, users, tasks, projects, opportunities, customers } from 
 import { eq, and, sql, between, gte, lte } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
+import { canViewGlobalDashboard } from '@/shared/policy/dashboard-policy';
+
+type WeeklyReportDetailUser = {
+  id: number;
+  realName: string | null;
+  email: string | null;
+};
+
+function normalizeWeeklyReportUser(value: unknown): WeeklyReportDetailUser | null {
+  if (!value) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    const firstUser = value[0];
+    return firstUser && typeof firstUser === 'object' ? firstUser as WeeklyReportDetailUser : null;
+  }
+
+  return typeof value === 'object' ? value as WeeklyReportDetailUser : null;
+}
+
+function toIsoDateString(value: string | Date) {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return value.toISOString().split('T')[0] ?? value.toISOString();
+}
+
+function toIsoDateTimeString(value: string | Date | null) {
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return value.toISOString();
+}
+
+function mapWeeklyReportDetail(record: {
+  id: number;
+  type: string;
+  userId: number | null;
+  weekStart: string | Date;
+  weekEnd: string | Date;
+  content: unknown;
+  generatedAt: string | Date;
+  sentAt: string | Date | null;
+  sent: boolean | null;
+  user?: unknown;
+}) {
+  const user = normalizeWeeklyReportUser(record.user);
+
+  return {
+    id: record.id,
+    type: record.type,
+    userId: record.userId,
+    userName: user?.realName ?? null,
+    weekStart: toIsoDateString(record.weekStart),
+    weekEnd: toIsoDateString(record.weekEnd),
+    content: record.content,
+    generatedAt: toIsoDateTimeString(record.generatedAt),
+    sentAt: toIsoDateTimeString(record.sentAt),
+    sent: Boolean(record.sent),
+    user,
+  };
+}
 
 // GET - 获取周报详情
 export const GET = withAuth(async (
@@ -25,6 +94,7 @@ export const GET = withAuth(async (
     }
     
     const userId = context.userId;
+    const hasGlobalScope = canViewGlobalDashboard(context.user);
 
     // 查询周报详情
     const report = await db.query.weeklyReports.findFirst({
@@ -45,12 +115,11 @@ export const GET = withAuth(async (
     }
 
     // 检查访问权限
-    if (report.type === 'personal' && report.userId !== userId) {
-      // 只有管理员可以查看他人周报
-      // 简化处理：暂时允许查看
+    if (report.type === 'personal' && report.userId !== userId && !hasGlobalScope) {
+      return errorResponse('FORBIDDEN', '无权查看他人周报', { status: 403 });
     }
 
-    return successResponse(report);
+    return successResponse(mapWeeklyReportDetail(report));
   } catch (error) {
     console.error('Failed to fetch weekly report:', error);
     return errorResponse('INTERNAL_ERROR', '获取周报详情失败');
@@ -81,6 +150,15 @@ export const PUT = withAuth(async (
     // 查询周报
     const report = await db.query.weeklyReports.findFirst({
       where: eq(weeklyReports.id, reportId),
+      with: {
+        user: {
+          columns: {
+            id: true,
+            realName: true,
+            email: true,
+          },
+        },
+      },
     });
 
     if (!report) {
@@ -104,7 +182,10 @@ export const PUT = withAuth(async (
       .where(eq(weeklyReports.id, reportId))
       .returning();
 
-    return successResponse(updatedReport);
+    return successResponse(mapWeeklyReportDetail({
+      ...updatedReport,
+      user: report.user ?? null,
+    }));
   } catch (error) {
     console.error('Failed to update weekly report:', error);
     return errorResponse('INTERNAL_ERROR', '更新周报失败');

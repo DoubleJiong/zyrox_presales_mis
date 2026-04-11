@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { withAuth } from '@/lib/auth-middleware';
+import { PERMISSIONS } from '@/lib/permissions';
 import { aggregateProjectLifecycleRows, type ProjectLifecycleRow } from '@/lib/project-reporting';
 
 // 内存缓存
@@ -33,6 +34,38 @@ type RegionLifecycleStat = ProjectLifecycleRow & {
   customerCount?: number | string | null;
 };
 
+type ZhejiangCustomerRow = {
+  id: number;
+  address?: string | null;
+  customerName?: string | null;
+};
+
+type ZhejiangProjectRow = {
+  projectId: number;
+  projectName?: string | null;
+  customerName?: string | null;
+  customerAddress?: string | null;
+  estimatedAmount?: number | string | null;
+  actualAmount?: number | string | null;
+  contractAmount?: number | string | null;
+  projectStage?: string | null;
+  status?: string | null;
+};
+
+type ZhejiangActivityRow = {
+  activityId: number;
+  customerAddress?: string | null;
+  customerName?: string | null;
+  projectName?: string | null;
+};
+
+type ZhejiangSolutionRow = {
+  solutionId: number;
+  customerAddress?: string | null;
+  customerName?: string | null;
+  projectName?: string | null;
+};
+
 function toNumber(value: number | string | null | undefined): number {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : 0;
@@ -58,6 +91,40 @@ function sumWonActualAmount(rows: ProjectLifecycleRow[]): number {
   return aggregated
     .filter((row) => row.status === 'won')
     .reduce((sum, row) => sum + row.actualAmount, 0);
+}
+
+function resolveZhejiangCityName(...inputs: Array<string | null | undefined>) {
+  const combinedText = inputs
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join(' ');
+
+  if (!combinedText) {
+    return null;
+  }
+
+  for (const city of ZHEJIANG_CITIES) {
+    const normalizedCityName = city.replace('市', '');
+    if (combinedText.includes(city) || combinedText.includes(normalizedCityName)) {
+      return city;
+    }
+  }
+
+  return null;
+}
+
+function isActiveZhejiangProject(project: Pick<ZhejiangProjectRow, 'projectStage' | 'status'>) {
+  const normalizedStage = (project.projectStage || '').trim().toLowerCase();
+  const normalizedStatus = (project.status || '').trim().toLowerCase();
+
+  if (['cancelled', 'completed', 'archived'].includes(normalizedStatus)) {
+    return false;
+  }
+
+  if (normalizedStage === 'archived') {
+    return false;
+  }
+
+  return true;
 }
 
 async function getProjectRegionCustomerStats() {
@@ -95,67 +162,73 @@ async function getProjectRegionLifecycleStats() {
   return (Array.isArray(lifecycleStats) ? lifecycleStats : (lifecycleStats as any).rows || []) as RegionLifecycleStat[];
 }
 
+async function getHeatmapPayload(searchParams: URLSearchParams) {
+  const mode = searchParams.get('mode') || 'customer';
+  const startDate = searchParams.get('startDate');
+  const endDate = searchParams.get('endDate');
+
+  // 检查缓存
+  const cacheKey = `heatmap:${mode}:${startDate || 'all'}:${endDate || 'all'}`;
+  const cached = cache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+    return cached.data;
+  }
+
+  let heatmapData: any[] = [];
+
+  // 根据模式获取不同数据
+  switch (mode) {
+    case 'customer':
+      heatmapData = await getCustomerHeatmap(startDate, endDate);
+      break;
+    case 'project':
+      heatmapData = await getProjectHeatmap(startDate, endDate);
+      break;
+    case 'budget':
+      heatmapData = await getBudgetHeatmap(startDate, endDate);
+      break;
+    case 'contract':
+      heatmapData = await getContractHeatmap(startDate, endDate);
+      break;
+    case 'activity':
+      heatmapData = await getActivityHeatmap(startDate, endDate);
+      break;
+    case 'solution':
+      heatmapData = await getSolutionHeatmap(startDate, endDate);
+      break;
+    case 'staff':
+      heatmapData = await getStaffHeatmap(startDate, endDate);
+      break;
+    case 'zhejiang':
+      heatmapData = await getZhejiangHeatmap(startDate, endDate);
+      break;
+    default:
+      heatmapData = await getCustomerHeatmap(startDate, endDate);
+  }
+
+  const responseData = {
+    type: mode,
+    regions: heatmapData,
+    timestamp: new Date().toISOString(),
+  };
+
+  // 更新缓存
+  cache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+
+  return responseData;
+}
+
 // GET - 获取热力图数据（优化版，带缓存和认证）
 export const GET = withAuth(async (request: NextRequest) => {
   try {
-    const { searchParams } = new URL(request.url);
-    const mode = searchParams.get('mode') || 'customer';
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
-
-    // 检查缓存
-    const cacheKey = `heatmap:${mode}:${startDate || 'all'}:${endDate || 'all'}`;
-    const cached = cache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-      return successResponse(cached.data);
-    }
-
-    let heatmapData: any[] = [];
-
-    // 根据模式获取不同数据
-    switch (mode) {
-      case 'customer':
-        heatmapData = await getCustomerHeatmap(startDate, endDate);
-        break;
-      case 'project':
-        heatmapData = await getProjectHeatmap(startDate, endDate);
-        break;
-      case 'budget':
-        heatmapData = await getBudgetHeatmap(startDate, endDate);
-        break;
-      case 'contract':
-        heatmapData = await getContractHeatmap(startDate, endDate);
-        break;
-      case 'activity':
-        heatmapData = await getActivityHeatmap(startDate, endDate);
-        break;
-      case 'solution':
-        heatmapData = await getSolutionHeatmap(startDate, endDate);
-        break;
-      case 'staff':
-        heatmapData = await getStaffHeatmap(startDate, endDate);
-        break;
-      case 'zhejiang':
-        heatmapData = await getZhejiangHeatmap(startDate, endDate);
-        break;
-      default:
-        heatmapData = await getCustomerHeatmap(startDate, endDate);
-    }
-
-    const responseData = {
-      type: mode,
-      regions: heatmapData,
-      timestamp: new Date().toISOString(),
-    };
-
-    // 更新缓存
-    cache.set(cacheKey, { data: responseData, timestamp: Date.now() });
-
-    return successResponse(responseData);
+    const searchParams = new URL(request.url).searchParams;
+    return successResponse(await getHeatmapPayload(searchParams));
   } catch (error) {
     console.error('Failed to fetch heatmap data:', error);
     return errorResponse('INTERNAL_ERROR', '获取热力图数据失败');
   }
+}, {
+  requiredPermissions: [PERMISSIONS.DATASCREEN_VIEW],
 });
 
 // 获取客户热力图
@@ -363,49 +436,148 @@ async function getStaffHeatmap(startDate?: string | null, endDate?: string | nul
 
 // 获取浙江省内热力图
 async function getZhejiangHeatmap(startDate?: string | null, endDate?: string | null) {
-  // 当前客户表没有 province/city 独立字段，按地址中的浙江城市名称做归类。
+  const cityAggregates = new Map(
+    ZHEJIANG_CITIES.map((city) => [
+      city,
+      {
+        customerIds: new Set<number>(),
+        projectIds: new Set<number>(),
+        solutionIds: new Set<number>(),
+        projectAmount: 0,
+        ongoingProjectAmount: 0,
+        preSalesActivity: 0,
+        contractAmount: 0,
+      },
+    ])
+  );
+
   const zhejiangCustomerRows = await db.execute(sql`
-    SELECT address
+    SELECT id, address, customer_name as "customerName"
     FROM bus_customer
     WHERE deleted_at IS NULL
       AND address IS NOT NULL
       AND address != ''
-      AND address LIKE '%浙江%'
   `);
 
-  const addressRows = (Array.isArray(zhejiangCustomerRows)
+  const customerRows = (Array.isArray(zhejiangCustomerRows)
     ? zhejiangCustomerRows
-    : (zhejiangCustomerRows as any).rows || []) as Array<{ address?: string | null }>;
+    : (zhejiangCustomerRows as any).rows || []) as ZhejiangCustomerRow[];
 
-  const cityCounts = new Map<string, number>();
+  for (const row of customerRows) {
+    const city = resolveZhejiangCityName(row.address, row.customerName);
+    if (!city) {
+      continue;
+    }
 
-  for (const city of ZHEJIANG_CITIES) {
-    cityCounts.set(city, 0);
+    cityAggregates.get(city)?.customerIds.add(row.id);
   }
 
-  for (const row of addressRows) {
-    const address = typeof row.address === 'string' ? row.address : '';
+  const zhejiangProjectRows = await db.execute(sql`
+    SELECT
+      p.id as "projectId",
+      p.project_name as "projectName",
+      p.customer_name as "customerName",
+      c.address as "customerAddress",
+      p.estimated_amount as "estimatedAmount",
+      p.actual_amount as "actualAmount",
+      p.contract_amount as "contractAmount",
+      p.project_stage as "projectStage",
+      p.status
+    FROM bus_project p
+    LEFT JOIN bus_customer c ON p.customer_id = c.id AND c.deleted_at IS NULL
+    WHERE p.deleted_at IS NULL
+  `);
 
-    for (const city of ZHEJIANG_CITIES) {
-      const normalizedCityName = city.replace('市', '');
-      if (address.includes(city) || address.includes(normalizedCityName)) {
-        cityCounts.set(city, (cityCounts.get(city) || 0) + 1);
-        break;
-      }
+  const projectRows = (Array.isArray(zhejiangProjectRows)
+    ? zhejiangProjectRows
+    : (zhejiangProjectRows as any).rows || []) as ZhejiangProjectRow[];
+
+  for (const row of projectRows) {
+    const city = resolveZhejiangCityName(row.customerAddress, row.customerName, row.projectName);
+    if (!city) {
+      continue;
+    }
+
+    const aggregate = cityAggregates.get(city);
+    if (!aggregate) {
+      continue;
+    }
+
+    aggregate.projectIds.add(row.projectId);
+    aggregate.projectAmount += toNumber(row.estimatedAmount);
+    aggregate.contractAmount += toNumber(row.contractAmount) || toNumber(row.actualAmount);
+
+    if (isActiveZhejiangProject(row)) {
+      aggregate.ongoingProjectAmount += toNumber(row.estimatedAmount);
     }
   }
 
-  return ZHEJIANG_CITIES.map(city => {
+  const zhejiangActivityRows = await db.execute(sql`
+    SELECT
+      sa.id as "activityId",
+      c.address as "customerAddress",
+      p.customer_name as "customerName",
+      p.project_name as "projectName"
+    FROM bus_staff_activity sa
+    INNER JOIN bus_project p ON sa.project_id = p.id AND p.deleted_at IS NULL
+    LEFT JOIN bus_customer c ON p.customer_id = c.id AND c.deleted_at IS NULL
+    WHERE sa.deleted_at IS NULL
+  `);
+
+  const activityRows = (Array.isArray(zhejiangActivityRows)
+    ? zhejiangActivityRows
+    : (zhejiangActivityRows as any).rows || []) as ZhejiangActivityRow[];
+
+  for (const row of activityRows) {
+    const city = resolveZhejiangCityName(row.customerAddress, row.customerName, row.projectName);
+    if (!city) {
+      continue;
+    }
+
+    const aggregate = cityAggregates.get(city);
+    if (aggregate) {
+      aggregate.preSalesActivity += 1;
+    }
+  }
+
+  const zhejiangSolutionRows = await db.execute(sql`
+    SELECT
+      sp.solution_id as "solutionId",
+      c.address as "customerAddress",
+      p.customer_name as "customerName",
+      p.project_name as "projectName"
+    FROM bus_solution_project sp
+    INNER JOIN bus_project p ON sp.project_id = p.id AND p.deleted_at IS NULL
+    LEFT JOIN bus_customer c ON p.customer_id = c.id AND c.deleted_at IS NULL
+    WHERE sp.deleted_at IS NULL
+  `);
+
+  const solutionRows = (Array.isArray(zhejiangSolutionRows)
+    ? zhejiangSolutionRows
+    : (zhejiangSolutionRows as any).rows || []) as ZhejiangSolutionRow[];
+
+  for (const row of solutionRows) {
+    const city = resolveZhejiangCityName(row.customerAddress, row.customerName, row.projectName);
+    if (!city) {
+      continue;
+    }
+
+    cityAggregates.get(city)?.solutionIds.add(row.solutionId);
+  }
+
+  return ZHEJIANG_CITIES.map((city) => {
+    const aggregate = cityAggregates.get(city);
+
     return {
       name: city,
-      customerCount: cityCounts.get(city) || 0,
-      projectCount: 0,
-      projectAmount: 0,
-      ongoingProjectAmount: 0,
-      solutionUsage: 0,
-      preSalesActivity: 0,
-      budget: 0,
-      contractAmount: 0,
+      customerCount: aggregate?.customerIds.size || 0,
+      projectCount: aggregate?.projectIds.size || 0,
+      projectAmount: aggregate?.projectAmount || 0,
+      ongoingProjectAmount: aggregate?.ongoingProjectAmount || 0,
+      solutionUsage: aggregate?.solutionIds.size || 0,
+      preSalesActivity: aggregate?.preSalesActivity || 0,
+      budget: aggregate?.projectAmount || 0,
+      contractAmount: aggregate?.contractAmount || 0,
     };
   });
 }

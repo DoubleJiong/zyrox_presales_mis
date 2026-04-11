@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { solutionReviewService } from '@/services/solution-review.service';
+import { authenticate } from '@/lib/auth';
 import { z } from 'zod';
 
 // 参数验证
@@ -30,6 +31,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string; reviewId: string }> }
 ) {
   try {
+    const user = await authenticate(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { reviewId: reviewIdStr } = await params;
     const reviewId = parseInt(reviewIdStr, 10);
     
@@ -46,6 +52,7 @@ export async function POST(
     
     const result = await solutionReviewService.submitReview({
       reviewId,
+      operatorId: user.id,
       reviewStatus: validated.reviewStatus,
       reviewComment: validated.reviewComment,
       reviewScore: validated.reviewScore,
@@ -66,6 +73,16 @@ export async function POST(
         { error: '参数验证失败', details: error.issues },
         { status: 400 }
       );
+    }
+
+    if (error instanceof Error) {
+      if (error.message === '只有当前评审人可以提交评审结果') {
+        return NextResponse.json({ error: error.message }, { status: 403 });
+      }
+
+      if (error.message === '评审已结束') {
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      }
     }
     
     return NextResponse.json(
