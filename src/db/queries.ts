@@ -196,6 +196,9 @@ export const projectQueries = {
     };
   },
 
+  // @deprecated 此函数中的 stage 值（proposal/presentation/negotiation/contract）均为旧版商机阶段，
+  // 当前受控阶段已迁移至 project-stage-types.ts（11 阶段状态机）。
+  // 此文件（db/queries.ts）已无任何业务代码引用，整体属于遗留死代码，待确认后删除。
   // 获取统计数据
   async getStats(userId?: string, userRole?: string) {
     // 获取所有项目

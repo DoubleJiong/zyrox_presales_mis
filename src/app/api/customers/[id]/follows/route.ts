@@ -4,6 +4,7 @@ import { users, staffProfiles } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { uploadFile, getFileUrl } from '@/lib/storage';
 import { successResponse, errorResponse } from '@/lib/api-response';
+import { notifyMentions } from '@/lib/messages/mention-notifier';
 import busboy from 'busboy';
 import { Readable } from 'stream';
 
@@ -392,9 +393,8 @@ export async function POST(
       }
     }
 
-    // 处理活动日期
-    const activityDate = new Date(followTime);
-    const formattedDate = activityDate.toISOString().split('T')[0];
+    // 处理活动日期：直接取输入字符串的日期部分，避免时区转换导致偏移一天
+    const formattedDate = String(followTime).substring(0, 10);
 
     // 处理出差日期
     const tripStartDate = tripStartDateStr ? new Date(tripStartDateStr).toISOString().split('T')[0] : null;
@@ -439,12 +439,13 @@ export async function POST(
     const newRecord = Array.isArray(result) ? result[0] : (result as any).rows?.[0];
     console.log('[Follow API] Record created:', newRecord?.id);
 
-    // 更新客户的最近互动时间
+    // 更新客户的最近互动时间（只向前推进，不允许历史记录覆盖更新的时间）
     await db.execute(sql`
       UPDATE bus_customer
       SET last_interaction_time = ${formattedDate}::timestamp,
           updated_at = NOW()
       WHERE id = ${customerId}
+        AND (last_interaction_time IS NULL OR last_interaction_time < ${formattedDate}::timestamp)
     `);
 
     // 为新记录生成附件访问URL
@@ -454,6 +455,19 @@ export async function POST(
       } catch (error) {
         console.warn('[Follow API] Failed to generate file URL:', error);
       }
+    }
+
+    // @提及通知：解析 followContent 中的 @姓名 并写入 sys_message
+    if (followContent && user) {
+      await notifyMentions({
+        text: followContent,
+        authorId: user.id,
+        title: `${followerName} 在客户跟进记录中提及了您`,
+        actionUrl: `/customers/${customerId}`,
+        actionText: '查看客户',
+        relatedType: 'customer',
+        relatedId: customerId,
+      });
     }
 
     return NextResponse.json({

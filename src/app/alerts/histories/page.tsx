@@ -47,7 +47,8 @@ import {
   FileText,
   Target,
   TrendingUp,
-  ChevronRight
+  ChevronRight,
+  BotOff
 } from 'lucide-react';
 
 interface AlertHistory {
@@ -65,6 +66,11 @@ interface AlertHistory {
   resolvedAt: string | null;
   resolvedBy: number | null;
   resolutionNote: string | null;
+  ignoredAt: string | null;
+  ignoredBy: number | null;
+  ignoreReason: string | null;
+  autoClosedAt: string | null;
+  autoClosedReason: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -80,8 +86,10 @@ export default function AlertHistoriesPage() {
   // 对话框状态
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
+  const [ignoreDialogOpen, setIgnoreDialogOpen] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<AlertHistory | null>(null);
   const [resolutionNote, setResolutionNote] = useState('');
+  const [ignoreText, setIgnoreText] = useState('');
 
   useEffect(() => {
     fetchHistories();
@@ -136,6 +144,7 @@ export default function AlertHistoriesPage() {
       acknowledged: { label: '已确认', color: 'bg-yellow-100 text-yellow-700' },
       resolved: { label: '已解决', color: 'bg-green-100 text-green-700' },
       ignored: { label: '已忽略', color: 'bg-gray-100 text-gray-700' },
+      auto_closed: { label: '自动关闭', color: 'bg-purple-100 text-purple-700' },
     };
     const statusInfo = statusMap[status] || { label: status, color: 'bg-gray-100 text-gray-700' };
     return <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
@@ -217,9 +226,33 @@ export default function AlertHistoriesPage() {
     setResolveDialogOpen(true);
   };
 
+  const handleIgnore = async () => {
+    if (!selectedAlert) return;
+    try {
+      const params = new URLSearchParams({ id: String(selectedAlert.id) });
+      if (ignoreText.trim()) params.append('ignoreReason', ignoreText.trim());
+      const response = await fetch(`/api/alerts/histories?${params}`, { method: 'DELETE' });
+      if (response.ok) {
+        await fetchHistories();
+        setIgnoreDialogOpen(false);
+        setSelectedAlert(null);
+        setIgnoreText('');
+      }
+    } catch (error) {
+      console.error('Failed to ignore alert:', error);
+    }
+  };
+
+  const openIgnoreDialog = (alert: AlertHistory) => {
+    setSelectedAlert(alert);
+    setIgnoreText('');
+    setIgnoreDialogOpen(true);
+  };
+
   const pendingCount = histories.filter(h => h.status === 'pending').length;
   const acknowledgedCount = histories.filter(h => h.status === 'acknowledged').length;
   const resolvedCount = histories.filter(h => h.status === 'resolved').length;
+  const autoClosedCount = histories.filter(h => h.status === 'auto_closed').length;
 
   if (loading) {
     return (
@@ -253,7 +286,7 @@ export default function AlertHistoriesPage() {
       {/* 主内容区 */}
       <div className="container mx-auto px-4 py-6">
         {/* 统计卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -306,6 +339,19 @@ export default function AlertHistoriesPage() {
               </div>
             </CardContent>
           </Card>
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">自动关闭</p>
+                  <p className="text-2xl font-bold mt-1 text-purple-600">{autoClosedCount}</p>
+                </div>
+                <div className="p-3 bg-purple-100 rounded-lg">
+                  <BotOff className="h-5 w-5 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* 过滤器 */}
@@ -334,6 +380,7 @@ export default function AlertHistoriesPage() {
                   <SelectItem value="acknowledged">已确认</SelectItem>
                   <SelectItem value="resolved">已解决</SelectItem>
                   <SelectItem value="ignored">已忽略</SelectItem>
+                  <SelectItem value="auto_closed">自动关闭</SelectItem>
                 </SelectContent>
               </Select>
               <div className="flex items-center gap-2">
@@ -426,6 +473,7 @@ export default function AlertHistoriesPage() {
                             <Button
                               size="sm"
                               variant="ghost"
+                              title="确认预警"
                               onClick={() => handleAcknowledge(history)}
                             >
                               <Check className="h-4 w-4" />
@@ -433,20 +481,40 @@ export default function AlertHistoriesPage() {
                             <Button
                               size="sm"
                               variant="ghost"
+                              title="标记已解决"
                               onClick={() => openResolveDialog(history)}
                             >
                               <ChevronRight className="h-4 w-4" />
                             </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              title="忽略预警"
+                              onClick={() => openIgnoreDialog(history)}
+                            >
+                              <X className="h-4 w-4 text-muted-foreground" />
+                            </Button>
                           </>
                         )}
                         {history.status === 'acknowledged' && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openResolveDialog(history)}
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              title="标记已解决"
+                              onClick={() => openResolveDialog(history)}
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              title="忽略预警"
+                              onClick={() => openIgnoreDialog(history)}
+                            >
+                              <X className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </>
                         )}
                       </div>
                     </TableCell>
@@ -539,8 +607,21 @@ export default function AlertHistoriesPage() {
                   <Label className="text-muted-foreground text-sm">解决备注</Label>
                   <p className="mt-1 p-3 bg-muted rounded-lg text-sm">{selectedAlert.resolutionNote}</p>
                 </div>
+              )}              {selectedAlert?.ignoreReason && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">忽略原因</Label>
+                  <p className="mt-1 p-3 bg-muted rounded-lg text-sm">{selectedAlert.ignoreReason}</p>
+                </div>
               )}
-            </div>
+              {selectedAlert?.autoClosedAt && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">自动关闭时间</Label>
+                  <p className="font-medium">{formatDate(selectedAlert.autoClosedAt)}</p>
+                  {selectedAlert.autoClosedReason && (
+                    <p className="mt-1 text-sm text-muted-foreground">{selectedAlert.autoClosedReason}</p>
+                  )}
+                </div>
+              )}            </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
@@ -554,6 +635,49 @@ export default function AlertHistoriesPage() {
                 确认预警
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 忽略预警对话框 */}
+      <Dialog open={ignoreDialogOpen} onOpenChange={setIgnoreDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>忽略预警</DialogTitle>
+            <DialogDescription>将该预警标记为已忽略，可选填写忽略原因</DialogDescription>
+          </DialogHeader>
+          {selectedAlert && (
+            <div className="space-y-4 py-4">
+              <div>
+                <Label className="text-muted-foreground text-sm">规则名称</Label>
+                <p className="font-medium">{selectedAlert.ruleName}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground text-sm">目标对象</Label>
+                <p className="font-medium">{selectedAlert.targetName}</p>
+              </div>
+              <div>
+                <Label>忽略原因（可选）</Label>
+                <Textarea
+                  value={ignoreText}
+                  onChange={(e) => setIgnoreText(e.target.value)}
+                  rows={3}
+                  placeholder="说明忽略该预警的原因…"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIgnoreDialogOpen(false);
+              setSelectedAlert(null);
+              setIgnoreText('');
+            }}>
+              取消
+            </Button>
+            <Button variant="secondary" onClick={handleIgnore}>
+              确认忽略
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

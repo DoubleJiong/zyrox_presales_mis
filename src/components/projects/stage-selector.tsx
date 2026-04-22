@@ -19,6 +19,7 @@ interface StageSelectorProps {
   currentStage: ProjectStage;
   currentStatus: ProjectStatus;
   disabled?: boolean;
+  isSystemAdmin?: boolean;
   onStageChange?: (newStage: ProjectStage) => void;
 }
 
@@ -27,11 +28,12 @@ export function StageSelector({
   currentStage,
   currentStatus,
   disabled = false,
+  isSystemAdmin = false,
   onStageChange,
 }: StageSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedStage, setSelectedStage] = useState<ProjectStage | null>(null);
-  const stageOptions = getStageOptions(currentStage, currentStatus);
+  const stageOptions = getStageOptions(currentStage, currentStatus, { isSystemAdmin });
 
   const handleSelect = (value: string) => {
     const stage = value as ProjectStage;

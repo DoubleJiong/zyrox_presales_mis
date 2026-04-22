@@ -1,7 +1,6 @@
 'use client';
 
 import { createContext, useContext, useState, ReactNode } from 'react';
-import { MapRegionData } from '@/lib/map-types';
 
 // 时间范围类型
 export type TimeRange = '7d' | '30d' | '90d';
@@ -14,10 +13,6 @@ export type MapLevel = 'nation' | 'province' | 'city';
 
 // 仪表板上下文接口
 interface DashboardContextType {
-  // 选中的区域
-  selectedRegion: MapRegionData | null;
-  setSelectedRegion: (region: MapRegionData | null) => void;
-  
   // 时间范围
   timeRange: TimeRange;
   setTimeRange: (range: TimeRange) => void;
@@ -61,7 +56,6 @@ const DashboardContext = createContext<DashboardContextType | undefined>(undefin
 
 // Provider组件
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const [selectedRegion, setSelectedRegion] = useState<MapRegionData | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>('customer');
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -96,8 +90,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   return (
     <DashboardContext.Provider
       value={{
-        selectedRegion,
-        setSelectedRegion,
         timeRange,
         setTimeRange,
         heatmapMode,

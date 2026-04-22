@@ -456,14 +456,6 @@ export const API_PERMISSIONS: Record<string, Permission[]> = {
   'GET:/api/data-screen/presales-focus-summary': [PERMISSIONS.DATASCREEN_VIEW],
   'GET:/api/data-screen/rankings': [PERMISSIONS.DATASCREEN_VIEW],
   'GET:/api/data-screen/stream': [PERMISSIONS.DATASCREEN_VIEW],
-  'GET:/api/data-screen/team-execution/customer': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
-  'GET:/api/data-screen/team-execution/detail': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
-  'GET:/api/data-screen/team-execution/project': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
-  'GET:/api/data-screen/team-execution/risk': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
-  'GET:/api/data-screen/team-execution/role': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
-  'GET:/api/data-screen/team-execution/solution': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
-  'GET:/api/data-screen/team-execution/summary': [PERMISSIONS.TEAM_EXECUTION_COCKPIT_VIEW],
-
   // 日志
   'GET:/api/logs': [PERMISSIONS.LOG_VIEW],
   'GET:/api/operation-logs': [PERMISSIONS.LOG_VIEW],

@@ -77,8 +77,14 @@ export class SolutionVersionService {
       throw new Error('只有草稿、审核中或已通过状态的方案可以创建版本');
     }
     
-    // 3. 计算新版本号
-    const newVersion = this.calculateNewVersion(solution.version || '1.0', changeType);
+    // 3. 计算新版本号：若尚无版本记录，则第一次保存时直接使用当前版本号（如 1.0），避免跳升到 2.0
+    const existingVersionsResult = await db.execute(sql`
+      SELECT COUNT(*) as cnt FROM bus_solution_version WHERE solution_id = ${solutionId}
+    `);
+    const existingCount = Number(existingVersionsResult[0]?.cnt ?? 0);
+    const newVersion = existingCount === 0
+      ? (solution.version || '1.0')
+      : this.calculateNewVersion(solution.version || '1.0', changeType);
     
     // 4. 生成快照
     const snapshot = await this.generateSnapshot(solutionId);

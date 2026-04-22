@@ -13,24 +13,45 @@ vi.mock('@/services/solution-review.service', () => ({
   },
 }));
 
+const mockInsert = vi.fn(() => ({ values: vi.fn().mockResolvedValue([]) }));
+const mockSelect = vi.fn();
+
 vi.mock('@/db', () => ({
   db: {
-    select: vi.fn(() => ({ from: vi.fn().mockReturnThis(), where: vi.fn(async () => [{ id: 8 }]) })),
+    insert: mockInsert,
+    select: mockSelect,
   },
 }));
 
 vi.mock('@/db/schema', () => ({
-  solutions: { id: 'solutions.id' },
+  messages: { id: 'messages.id' },
+  solutions: { id: 'solutions.id', authorId: 'solutions.authorId', solutionName: 'solutions.solutionName' },
+  solutionReviews: { id: 'solutionReviews.id', solutionId: 'solutionReviews.solutionId' },
 }));
 
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn(),
 }));
 
+vi.mock('@/lib/auth', () => ({
+  authenticate: vi.fn().mockResolvedValue({ id: 99, realName: '测试用户', roleId: 1 }),
+}));
+
+vi.mock('@/lib/messages/send', () => ({
+  sendMessage: vi.fn().mockResolvedValue({ id: 1 }),
+}));
+
 describe('solution reviews api', () => {
   beforeEach(() => {
     createReview.mockReset();
     submitReview.mockReset();
+    mockInsert.mockReturnValue({ values: vi.fn().mockResolvedValue([]) });
+    // Default select mock: solution exists, review lookup returns solutionId, solution lookup returns authorId
+    mockSelect.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ id: 8, authorId: 5, solutionName: '测试方案', solutionId: 8 }]),
+      }),
+    });
   });
 
   it('creates review tasks through the solution review service', async () => {
@@ -82,6 +103,7 @@ describe('solution reviews api', () => {
     expect(response.status).toBe(200);
     expect(submitReview).toHaveBeenCalledWith({
       reviewId: 501,
+      operatorId: 99,
       reviewStatus: 'approved',
       reviewComment: '通过',
       reviewScore: 96,

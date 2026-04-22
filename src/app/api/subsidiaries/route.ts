@@ -68,8 +68,16 @@ export async function POST(request: NextRequest) {
       .returning();
 
     return successResponse(created, { status: 201 });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to create subsidiary:', error);
+    const errStr = String(error);
+    const causeConstraint = (error as { cause?: { constraint_name?: string } })?.cause?.constraint_name || '';
+    if (errStr.includes('subsidiary_code_unique') || causeConstraint.includes('subsidiary_code_unique')) {
+      return errorResponse('BAD_REQUEST', '公司编码已存在，请使用其他编码');
+    }
+    if (errStr.includes('subsidiary_name_unique') || causeConstraint.includes('subsidiary_name_unique')) {
+      return errorResponse('BAD_REQUEST', '公司名称已存在，请使用其他名称');
+    }
     return errorResponse('INTERNAL_ERROR', '创建分子公司失败');
   }
 }

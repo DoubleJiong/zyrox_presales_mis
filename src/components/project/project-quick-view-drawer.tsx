@@ -13,10 +13,9 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer';
-import { getProjectCustomerTypeOrIndustryLabel } from '@/lib/project-field-mappings';
+import { getProjectCustomerTypeOrIndustryLabel, getRegionLabel } from '@/lib/project-field-mappings';
 import {
   getProjectTypeDisplayLabel,
-  getProjectTypeOaCategoryLabel,
   normalizeProjectTypeCodes,
 } from '@/lib/project-type-codec';
 
@@ -36,6 +35,8 @@ interface ProjectQuickView {
   expectedDeliveryDate: string | null;
   updatedAt: string;
   risks?: string | null;
+  fundSource?: string | null;
+  contractingCompanyName?: string | null;
 }
 
 interface ProjectQuickViewDrawerProps {
@@ -127,7 +128,7 @@ export function ProjectQuickViewDrawer({
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span>{project.region || '-'}</span>
+                  <span>{getRegionLabel(project.region) || '-'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <User className="h-4 w-4 text-muted-foreground" />
@@ -146,7 +147,6 @@ export function ProjectQuickViewDrawer({
                     <Badge key={code} variant="outline" className="gap-1">
                       <FolderKanban className="h-3 w-3" />
                       <span>{getProjectTypeDisplayLabel(code)}</span>
-                      <span className="text-muted-foreground">/ {getProjectTypeOaCategoryLabel(code)}</span>
                     </Badge>
                   )) : (
                     <span className="text-sm text-muted-foreground">未设置</span>
@@ -171,6 +171,18 @@ export function ProjectQuickViewDrawer({
                   <div className="text-muted-foreground">预计交付</div>
                   <div className="mt-1 font-medium">{formatDate(project.expectedDeliveryDate)}</div>
                 </div>
+                {project.fundSource && (
+                  <div className="rounded-lg border p-3">
+                    <div className="text-muted-foreground">资金来源</div>
+                    <div className="mt-1 font-medium">{project.fundSource}</div>
+                  </div>
+                )}
+                {project.contractingCompanyName && (
+                  <div className="rounded-lg border p-3">
+                    <div className="text-muted-foreground">承接公司</div>
+                    <div className="mt-1 font-medium">{project.contractingCompanyName}</div>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">

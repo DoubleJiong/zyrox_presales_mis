@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,34 +54,61 @@ import {
   Upload,
   Download,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  MessageSquare,
+  Layers,
+  Calendar,
+  Bell,
+  Calculator,
+  Banknote,
+  Trophy,
+  BarChart,
 } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { extractErrorMessage } from '@/lib/api-response';
 import {
   canManageAttributeCategoryInGui,
-  isDedicatedMasterDataAttributeCategory,
   isGuiManagedSystemAttributeCategory,
 } from '@/lib/config/dictionary-governance';
+import { DICT_CATEGORIES } from '@/lib/config/dictionary-config';
 
 // 字典分类图标映射
 const categoryIcons: Record<string, React.ReactNode> = {
-  customer_type: <Building2 className="h-4 w-4" />,
-  project_type: <FolderKanban className="h-4 w-4" />,
-  project_status: <CircleDot className="h-4 w-4" />,
+  customer_status: <CircleDot className="h-4 w-4" />,
   industry: <Building className="h-4 w-4" />,
+  followup_type: <MessageSquare className="h-4 w-4" />,
+  department: <Building2 className="h-4 w-4" />,
+  user_status: <CircleDot className="h-4 w-4" />,
+  gender: <Users className="h-4 w-4" />,
+  project_type: <FolderKanban className="h-4 w-4" />,
+  project_stage: <Layers className="h-4 w-4" />,
   region: <MapPin className="h-4 w-4" />,
   priority: <AlertCircle className="h-4 w-4" />,
-  demand_type: <FileText className="h-4 w-4" />,
-  intent_level: <Target className="h-4 w-4" />,
-  opportunity_stage: <Lightbulb className="h-4 w-4" />,
-  solution_type: <FileCheck className="h-4 w-4" />,
-  service_type: <Wrench className="h-4 w-4" />,
-  arbitration_type: <Scale className="h-4 w-4" />,
+  solution_status: <CircleDot className="h-4 w-4" />,
+  schedule_type: <Calendar className="h-4 w-4" />,
+  schedule_status: <CircleDot className="h-4 w-4" />,
+  todo_status: <CircleDot className="h-4 w-4" />,
+  task_status: <CircleDot className="h-4 w-4" />,
   alert_severity: <AlertTriangle className="h-4 w-4" />,
-  alert_category: <AlertTriangle className="h-4 w-4" />,
-  member_role: <Users className="h-4 w-4" />,
-  file_type: <FileSpreadsheet className="h-4 w-4" />,
+  alert_status: <CircleDot className="h-4 w-4" />,
+  alert_rule_type: <Bell className="h-4 w-4" />,
+  alert_rule_status: <CircleDot className="h-4 w-4" />,
+  alert_history_status: <CircleDot className="h-4 w-4" />,
+  alert_channel: <Bell className="h-4 w-4" />,
+  risk_level: <AlertTriangle className="h-4 w-4" />,
+  bidding_method: <FileText className="h-4 w-4" />,
+  scoring_method: <Calculator className="h-4 w-4" />,
+  fund_source: <Banknote className="h-4 w-4" />,
+  bid_result: <Trophy className="h-4 w-4" />,
+  contract_status: <FileCheck className="h-4 w-4" />,
+  contract_process_status: <CircleDot className="h-4 w-4" />,
+  contract_sign_mode: <FileText className="h-4 w-4" />,
+  contract_user_type: <Building className="h-4 w-4" />,
+  contract_project_category: <FolderKanban className="h-4 w-4" />,
+  arbitration_status: <Scale className="h-4 w-4" />,
+  arbitration_type: <Scale className="h-4 w-4" />,
+  performance_status: <BarChart className="h-4 w-4" />,
 };
 
 // 类型定义
@@ -128,6 +154,8 @@ export default function DictionaryManagementPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(initialCategory);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [categorySearchTerm, setCategorySearchTerm] = useState('');
+  const [categoryItemCounts, setCategoryItemCounts] = useState<Record<string, number>>({});
   
   // 对话框状态
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
@@ -145,13 +173,17 @@ export default function DictionaryManagementPage() {
   });
 
   const selectedCategoryInfo = categories.find(c => c.categoryCode === selectedCategory);
-  const isDedicatedMasterDataCategory = selectedCategoryInfo
-    ? isDedicatedMasterDataAttributeCategory(selectedCategoryInfo.categoryCode)
-    : false;
   const canManageSelectedCategory = selectedCategoryInfo
-    ? !isDedicatedMasterDataCategory
-      && canManageAttributeCategoryInGui(selectedCategoryInfo.categoryCode, selectedCategoryInfo.isSystem)
+    ? canManageAttributeCategoryInGui(selectedCategoryInfo.categoryCode, selectedCategoryInfo.isSystem)
     : false;
+  const isProjectTypeCategory = selectedCategoryInfo?.categoryCode === 'project_type';
+
+  // 按搜索词过滤分类
+  const filteredCategories = categories.filter(c =>
+    !categorySearchTerm ||
+    c.categoryName.toLowerCase().includes(categorySearchTerm.toLowerCase()) ||
+    c.categoryCode.toLowerCase().includes(categorySearchTerm.toLowerCase())
+  );
 
   // 加载分类列表
   const loadCategories = async () => {
@@ -184,6 +216,7 @@ export default function DictionaryManagementPage() {
       const data = await response.json();
       if (data.success) {
         setItems(data.data);
+        setCategoryItemCounts(prev => ({ ...prev, [category]: data.data.length }));
       }
     } catch (error) {
       console.error('Failed to load items:', error);
@@ -425,8 +458,8 @@ export default function DictionaryManagementPage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (isDedicatedMasterDataCategory) {
-      toast.error('当前分类已迁移到专用主数据管理页，不支持通过通用字典导入');
+    if (!canManageSelectedCategory) {
+      toast.error('当前分类不支持通过 GUI 导入');
       event.target.value = '';
       return;
     }
@@ -475,9 +508,7 @@ export default function DictionaryManagementPage() {
           <p className="text-muted-foreground">管理系统中的所有下拉选项数据源，一处配置，全局生效</p>
           {selectedCategoryInfo && (
             <p className="text-xs text-muted-foreground mt-1">
-              {isDedicatedMasterDataCategory
-                ? '当前分类已迁移到项目类型主数据管理页，不在通用字典中维护。'
-                : canManageSelectedCategory
+              {canManageSelectedCategory
                 ? '当前分类允许通过 GUI 维护，配置同步不会覆盖现有业务值。'
                 : '当前分类属于系统流程/策略枚举，仅供查看，不建议通过 GUI 修改。'}
             </p>
@@ -508,7 +539,7 @@ export default function DictionaryManagementPage() {
             variant="outline"
             size="sm"
             onClick={() => document.getElementById('import-file')?.click()}
-            disabled={isDedicatedMasterDataCategory}
+            disabled={isProjectTypeCategory}
           >
             <Upload className="h-4 w-4 mr-1" />
             导入
@@ -517,7 +548,7 @@ export default function DictionaryManagementPage() {
             variant="outline"
             size="sm"
             onClick={() => handleExport('json')}
-            disabled={isDedicatedMasterDataCategory}
+            disabled={isProjectTypeCategory}
           >
             <Download className="h-4 w-4 mr-1" />
             导出JSON
@@ -526,7 +557,7 @@ export default function DictionaryManagementPage() {
             variant="outline"
             size="sm"
             onClick={() => handleExport('csv')}
-            disabled={isDedicatedMasterDataCategory}
+            disabled={isProjectTypeCategory}
           >
             <FileSpreadsheet className="h-4 w-4 mr-1" />
             导出CSV
@@ -539,10 +570,19 @@ export default function DictionaryManagementPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">字典分类</CardTitle>
             <CardDescription>选择分类查看字典项</CardDescription>
+            <div className="relative mt-2">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="搜索分类..."
+                value={categorySearchTerm}
+                onChange={(e) => setCategorySearchTerm(e.target.value)}
+                className="pl-9 h-8 text-sm"
+              />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="divide-y">
-              {categories.map((category) => (
+            <div className="divide-y max-h-[calc(100vh-320px)] overflow-y-auto">
+              {filteredCategories.map((category) => (
                 <button
                   key={category.id}
                   onClick={() => setSelectedCategory(category.categoryCode)}
@@ -563,9 +603,16 @@ export default function DictionaryManagementPage() {
                       <div className="text-xs text-muted-foreground">{category.categoryCode}</div>
                     </div>
                   </div>
-                  <ChevronRight className={`h-4 w-4 text-muted-foreground ${
-                    selectedCategory === category.categoryCode ? 'opacity-100' : 'opacity-0'
-                  }`} />
+                  <div className="flex items-center gap-1">
+                    {categoryItemCounts[category.categoryCode] != null && (
+                      <Badge variant="secondary" className="text-xs px-1.5 min-w-[1.5rem] justify-center">
+                        {categoryItemCounts[category.categoryCode]}
+                      </Badge>
+                    )}
+                    <ChevronRight className={`h-4 w-4 text-muted-foreground ${
+                      selectedCategory === category.categoryCode ? 'opacity-100' : 'opacity-0'
+                    }`} />
+                  </div>
                 </button>
               ))}
             </div>
@@ -582,6 +629,11 @@ export default function DictionaryManagementPage() {
                 </CardTitle>
                 <CardDescription>
                   {selectedCategoryInfo?.description || '选择左侧分类查看字典项'}
+                  {selectedCategory && DICT_CATEGORIES[selectedCategory]?.referencedBy?.length > 0 && (
+                    <span className="block text-xs mt-1">
+                      引用方：{DICT_CATEGORIES[selectedCategory].referencedBy.join('、')}
+                    </span>
+                  )}
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -594,7 +646,7 @@ export default function DictionaryManagementPage() {
                     className="pl-9 w-48"
                   />
                 </div>
-                <Button onClick={handleAddItem} size="sm" disabled={!canManageSelectedCategory}>
+                <Button onClick={handleAddItem} size="sm" disabled={!canManageSelectedCategory || isProjectTypeCategory}>
                   <Plus className="h-4 w-4 mr-1" />
                   新增字典项
                 </Button>
@@ -602,18 +654,15 @@ export default function DictionaryManagementPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {isDedicatedMasterDataCategory ? (
-              <Alert>
-                <FolderKanban className="h-4 w-4" />
-                <AlertTitle>项目类型已切换到专用管理路径</AlertTitle>
-                <AlertDescription>
-                  `project_type` 由 `sys_project_type` 统一维护，编码变更还需要同步项目表和客户类型默认值。
-                  <Link href="/settings/project-types" className="ml-1 underline underline-offset-2">
-                    前往项目类型管理
-                  </Link>
-                </AlertDescription>
-              </Alert>
-            ) : loading ? (
+            {isProjectTypeCategory && (
+              <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <p>当前分类已迁移到项目类型主数据管理页，不在通用字典中维护。</p>
+                <Link href="/settings/project-types" className="mt-1 inline-block font-medium underline">
+                  前往项目类型管理
+                </Link>
+              </div>
+            )}
+            {loading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>

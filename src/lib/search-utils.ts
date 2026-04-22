@@ -110,7 +110,7 @@ export const CUSTOMER_SEARCH_FIELDS: SearchFieldConfig[] = [
   },
   {
     key: 'totalAmount',
-    label: '历史成交金额',
+    label: '历史中标总额',
     type: 'number',
     operators: ['eq', 'gt', 'gte', 'lt', 'lte', 'between'],
   },

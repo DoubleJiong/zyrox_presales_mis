@@ -105,12 +105,12 @@ async function executeSeedData() {
     await db.execute(sql`
       INSERT INTO sys_role (id, role_name, role_code, description, permissions, status, created_at, updated_at) VALUES
       (1, '系统管理员', 'admin', '系统管理员，拥有所有权限', '["*"]', 'active', NOW(), NOW()),
-      (2, '售前主管', 'presale_manager', '售前团队主管，负责团队管理和决策', '["dashboard.*", "projects.*", "customers.*", "solutions.*", "staff.*", "performances.*", "alerts.*", "schedules.*", "todos.*"]', 'active', NOW(), NOW()),
-      (3, '总部售前工程师', 'hq_presale_engineer', '总部售前工程师，负责大型项目售前支持', '["dashboard.view", "projects.*", "customers.*", "solutions.*", "schedules.*", "todos.*", "work-logs.*"]', 'active', NOW(), NOW()),
-      (4, '解决方案工程师', 'solution_engineer', '解决方案工程师，负责方案设计和编写', '["dashboard.view", "projects.view", "customers.view", "solutions.*", "templates.*"]', 'active', NOW(), NOW()),
-      (5, '区域售前工程师', 'regional_presale_engineer', '区域售前工程师，负责区域项目售前支持', '["dashboard.view", "projects.view", "customers.view", "solutions.view", "schedules.*", "todos.*", "work-logs.*"]', 'active', NOW(), NOW()),
-      (6, '销售代表', 'sales_rep', '销售代表，负责客户开发和商机管理', '["dashboard.view", "customers.*", "opportunities.*", "leads.*", "projects.view", "schedules.*", "todos.*"]', 'active', NOW(), NOW()),
-      (7, '财务专员', 'finance_specialist', '财务专员，负责成本核算和仲裁审核', '["dashboard.view", "arbitrations.*", "performances.view"]', 'active', NOW(), NOW())
+      (2, '售前主管', 'presale_manager', '售前团队主管，负责团队管理和决策', '["customer:view","customer:create","customer:update","customer:delete","project:view","project:create","project:update","project:delete","solution:view","solution:create","solution:update","solution:delete","user:view","user:create","user:update","user:delete","performance:view","performance:update","alert:view","alert:update"]', 'active', NOW(), NOW()),
+      (3, '总部售前工程师', 'hq_presale_engineer', '总部售前工程师，负责大型项目售前支持', '["project:view","project:create","project:update","project:delete","customer:view","customer:create","customer:update","customer:delete","solution:view","solution:create","solution:update","solution:delete"]', 'active', NOW(), NOW()),
+      (4, '解决方案工程师', 'solution_engineer', '解决方案工程师，负责方案设计和编写', '["project:view","customer:view","solution:view","solution:create","solution:update","solution:delete"]', 'active', NOW(), NOW()),
+      (5, '区域售前工程师', 'regional_presale_engineer', '区域售前工程师，负责区域项目售前支持', '["project:view","project:create","project:update","customer:view","solution:view","solution:create","solution:update","solution:delete"]', 'active', NOW(), NOW()),
+      (6, '销售代表', 'sales_rep', '销售代表，负责客户开发和商机管理', '["customer:view","customer:create","customer:update","customer:delete","project:view","project:create","project:update","solution:view","solution:create"]', 'active', NOW(), NOW()),
+      (7, '财务专员', 'finance_specialist', '财务专员，负责成本核算和仲裁审核', '["performance:view"]', 'active', NOW(), NOW())
     `);
     // 重置序列
     await db.execute(sql`SELECT setval('sys_role_id_seq', 7, true)`);

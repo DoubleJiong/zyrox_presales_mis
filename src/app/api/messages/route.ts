@@ -4,10 +4,9 @@ import { messages, users } from '@/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { parsePaginationParams } from '@/lib/pagination';
 import { withAuth } from '@/lib/auth-middleware';
+import { getUserPermissions } from '@/lib/rbac';
+import type { MessageType, MessagePriority } from '@/lib/messages/constants';
 
-// 消息类型
-type MessageType = 'system' | 'notification' | 'alert' | 'reminder' | 'message';
-type MessagePriority = 'low' | 'normal' | 'high' | 'urgent';
 type MessageCategory = 'task' | 'project' | 'customer' | 'system';
 
 // 获取消息列表
@@ -17,12 +16,25 @@ export const GET = withAuth(async (request: NextRequest, { userId }) => {
     const type = searchParams.get('type');
     const category = searchParams.get('category');
     const isRead = searchParams.get('isRead');
+    const viewAs = searchParams.get('viewAs');
     const { page, pageSize, offset } = parsePaginationParams(searchParams);
 
+    // viewAs=admin：管理员可查看全量消息（不限接收人）
+    let adminView = false;
+    if (viewAs === 'admin') {
+      const userPerms = await getUserPermissions(userId);
+      if (userPerms?.isSuperAdmin) {
+        adminView = true;
+      }
+    }
+
     const conditions = [
-      eq(messages.receiverId, userId),
       eq(messages.isDeleted, false),
     ];
+
+    if (!adminView) {
+      conditions.push(eq(messages.receiverId, userId));
+    }
 
     if (type) {
       conditions.push(eq(messages.type, type));
@@ -104,7 +116,7 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
     const {
       title,
       content,
-      type = 'notification',
+      type = 'system' as MessageType,
       category,
       priority = 'normal',
       receiverId,

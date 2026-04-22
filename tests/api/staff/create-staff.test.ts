@@ -49,7 +49,7 @@ describe('staff creation hardening', () => {
     });
   });
 
-  it('rejects staff creation when password is missing', async () => {
+  it('blocks staff creation (POST) with 405 METHOD_NOT_ALLOWED', async () => {
     const { POST } = await import('../../../src/app/api/staff/route');
 
     const response = await POST(
@@ -66,17 +66,17 @@ describe('staff creation hardening', () => {
       })
     );
 
-    expect(response.status).toBe(422);
+    expect(response.status).toBe(405);
     await expect(response.json()).resolves.toMatchObject({
       success: false,
       error: {
-        code: 'VALIDATION_ERROR',
+        code: 'METHOD_NOT_ALLOWED',
       },
     });
     expect(valuesMock).not.toHaveBeenCalled();
   });
 
-  it('requires an explicit password and hashes it before insert', async () => {
+  it('blocks all staff write operations — POST always returns 405', async () => {
     const { POST } = await import('../../../src/app/api/staff/route');
 
     const response = await POST(
@@ -87,10 +87,6 @@ describe('staff creation hardening', () => {
           password: 'StrongPass1',
           realName: '新员工',
           email: 'new.user@example.com',
-          phone: '',
-          department: '售前部',
-          roleId: null,
-          status: 'active',
         }),
         headers: {
           'content-type': 'application/json',
@@ -98,16 +94,7 @@ describe('staff creation hardening', () => {
       })
     );
 
-    expect(response.status).toBe(200);
-    expect(valuesMock).toHaveBeenCalledWith(expect.objectContaining({
-      username: 'new_user',
-      password: expect.any(String),
-      realName: '新员工',
-      email: 'new.user@example.com',
-      department: '售前部',
-      roleId: null,
-      status: 'active',
-    }));
-    expect(valuesMock.mock.calls[0][0].password).not.toBe('StrongPass1');
+    expect(response.status).toBe(405);
+    expect(valuesMock).not.toHaveBeenCalled();
   });
 });

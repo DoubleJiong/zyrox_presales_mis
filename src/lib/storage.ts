@@ -18,7 +18,7 @@ function isRemoteStorageConfigured() {
   return Boolean(process.env.COZE_BUCKET_ENDPOINT_URL);
 }
 
-function isLocalStorageKey(key: string) {
+export function isLocalStorageKey(key: string) {
   return key.startsWith(`${LOCAL_UPLOAD_PREFIX}/`);
 }
 

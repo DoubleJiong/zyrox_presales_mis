@@ -150,7 +150,8 @@ export const PUT = withAuth(async (
       scoringMethod: body.scoringMethod,
       priceLimit: body.priceLimit,
       fundSource: body.fundSource,
-      biddingType: body.biddingType,
+      // Mirror biddingMethod into biddingType for stats backward compat
+      biddingType: body.biddingMethod ?? body.biddingType,
       bidDeadline: normalizeTimestampField(body.bidDeadline),
       bidBondAmount: body.bidBondAmount,
       bidBondStatus: body.bidBondStatus,

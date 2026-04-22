@@ -362,8 +362,16 @@ function matchPermissionPath(actualPath: string, routePath: string): boolean {
 export async function checkApiPermission(
   userId: number,
   method: string,
-  path: string
+  path: string,
+  search?: string
 ): Promise<{ allowed: boolean; reason?: string }> {
+  // 成员/评审人搜索场景：只需登录，无需 user:view 权限
+  // 路由内部已有数据权限控制（purpose=member_search 仅返回姓名/邮箱等基础信息）
+  if (method === 'GET' && path === '/api/users' && search && new URLSearchParams(search).get('purpose') === 'member_search') {
+    const user = await getUserPermissions(userId);
+    return user ? { allowed: true } : { allowed: false, reason: '用户不存在或已禁用' };
+  }
+
   // 获取用户权限
   const user = await getUserPermissions(userId);
   if (!user) {

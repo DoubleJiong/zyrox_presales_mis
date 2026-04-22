@@ -10,6 +10,7 @@ export function AppShellProviders({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const publicPaths = ['/login', '/register'];
   const isPublicPage = publicPaths.some((path) => pathname?.startsWith(path));
+  const isImmersivePage = pathname?.startsWith('/data-screen');
 
   return (
     <AuthProvider>
@@ -18,7 +19,13 @@ export function AppShellProviders({ children }: { children: React.ReactNode }) {
           children
         ) : (
           <PermissionProvider>
-            <MainLayout>{children}</MainLayout>
+            {isImmersivePage ? (
+              <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#0a0f1e' }}>
+                {children}
+              </div>
+            ) : (
+              <MainLayout>{children}</MainLayout>
+            )}
           </PermissionProvider>
         )}
       </RootAuthCheck>

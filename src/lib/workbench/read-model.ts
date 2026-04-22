@@ -1,4 +1,5 @@
 import { db } from '@/db';
+import { getMessageTypeLabel } from '@/lib/messages/constants';
 import {
   alertHistories,
   alertNotifications,
@@ -18,7 +19,7 @@ import { and, count, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzl
 import { getProjectDisplayStatusLabel } from '@/lib/project-display';
 import { getAccessibleProjectIds, isSystemAdmin } from '@/lib/permissions/project';
 
-export type ActivityType = 'opportunity' | 'project' | 'followup' | 'quotation' | 'task' | 'alert' | 'message' | 'approval' | 'system';
+export type ActivityType = 'opportunity' | 'project' | 'followup' | 'quotation' | 'task' | 'alert' | 'message' | 'approval' | 'system' | 'mention';
 export type ActivityIntent = 'message-read' | 'alert-acknowledge' | 'task-complete' | 'task-defer';
 
 export interface ActivityQuickAction {
@@ -103,10 +104,10 @@ interface WorkbenchSummaryData {
   inboxFeed: WorkbenchActivity[];
 }
 
-const DEFAULT_ACTIVITY_TYPES: ActivityType[] = ['opportunity', 'project', 'followup', 'quotation', 'task', 'alert', 'message'];
+const DEFAULT_ACTIVITY_TYPES: ActivityType[] = ['opportunity', 'project', 'followup', 'quotation', 'task', 'alert', 'message', 'approval', 'system'];
 
 export function normalizeActivityTypes(rawTypes: string | null): ActivityType[] {
-  const allowedTypes: ActivityType[] = ['opportunity', 'project', 'followup', 'quotation', 'task', 'alert', 'message', 'approval', 'system'];
+  const allowedTypes: ActivityType[] = ['opportunity', 'project', 'followup', 'quotation', 'task', 'alert', 'message', 'approval', 'system', 'mention'];
   const parsedTypes = rawTypes?.split(',').filter((type): type is ActivityType => allowedTypes.includes(type as ActivityType));
 
   return parsedTypes && parsedTypes.length > 0 ? parsedTypes : DEFAULT_ACTIVITY_TYPES;
@@ -213,8 +214,9 @@ function getActivityStyle(type: ActivityType) {
     task: { icon: 'check-square', color: 'text-cyan-500', bgColor: 'bg-cyan-500/10' },
     alert: { icon: 'alert-triangle', color: 'text-red-500', bgColor: 'bg-red-500/10' },
     message: { icon: 'mail', color: 'text-sky-500', bgColor: 'bg-sky-500/10' },
-    approval: { icon: 'check-circle', color: 'text-cyan-500', bgColor: 'bg-cyan-500/10' },
+    approval: { icon: 'check-circle', color: 'text-emerald-500', bgColor: 'bg-emerald-500/10' },
     system: { icon: 'alert-circle', color: 'text-yellow-500', bgColor: 'bg-yellow-500/10' },
+    mention: { icon: 'at-sign', color: 'text-violet-500', bgColor: 'bg-violet-500/10' },
   };
 
   return styles[type] || styles.system;
@@ -255,18 +257,6 @@ function getAlertSeverityLabel(severity: string | null | undefined) {
   };
 
   return severityLabels[severity || ''] || '中';
-}
-
-function getMessageTypeLabel(type: string | null | undefined) {
-  const typeLabels: Record<string, string> = {
-    system: '系统',
-    notification: '通知',
-    alert: '预警',
-    reminder: '提醒',
-    message: '消息',
-  };
-
-  return typeLabels[type || ''] || '消息';
 }
 
 function buildAlertTaskHref() {
@@ -623,9 +613,23 @@ export async function getWorkbenchInboxFeed({
       .limit(activityFetchLimit);
 
     messageRows.forEach((messageItem) => {
+      // Map sys_message types to ActivityType
+      const msgTypeMap: Record<string, ActivityType> = {
+        task: 'task',
+        approval: 'approval',
+        alert: 'alert',
+        system: 'system',
+        mention: 'mention',
+        reminder: 'message',
+      };
+      const activityType: ActivityType = msgTypeMap[messageItem.type] ?? 'message';
+
+      // Build approal-specific quick action href
+      const approvalHref = messageItem.actionUrl || '/biddings/approvals';
+
       activities.push({
         id: `msg-${messageItem.id}`,
-        type: 'message',
+        type: activityType,
         action: '收到消息',
         title: messageItem.title,
         description: `${getMessageTypeLabel(messageItem.type)}${messageItem.priority ? ` · ${messageItem.priority}` : ''}`,
@@ -636,10 +640,15 @@ export async function getWorkbenchInboxFeed({
         relatedName: messageItem.relatedName || messageItem.title,
         sourceLabel: '消息',
         href: messageItem.actionUrl || '/messages',
-        quickActions: [
-          { label: '标为已读', href: '/messages', intent: 'message-read', targetId: messageItem.id },
-          { label: messageItem.actionText || '处理消息', href: messageItem.actionUrl || '/messages' },
-        ],
+        quickActions: activityType === 'approval'
+          ? [
+              { label: messageItem.actionText || '处理审批', href: approvalHref },
+              { label: '标为已读', href: '/messages', intent: 'message-read', targetId: messageItem.id },
+            ]
+          : [
+              { label: '标为已读', href: '/messages', intent: 'message-read', targetId: messageItem.id },
+              { label: messageItem.actionText || '处理消息', href: messageItem.actionUrl || '/messages' },
+            ],
         createdAt: messageItem.createdAt || new Date(),
       });
     });
@@ -800,11 +809,48 @@ export async function getWorkbenchSummaryReadModel(userId: number): Promise<Work
     .orderBy(schedules.startDate, schedules.startTime)
     .limit(6);
 
+  // D5: 今日任务面板 — 当前用户为受让人的任务所关联的今日日程
+  // 补充 buildScheduleAccessCondition 可能遗漏的任务关联日程
+  const focusScheduleIds = new Set(focusSchedules.map((s) => s.id));
+  const taskLinkedSchedulesToday = await db
+    .select({
+      id: schedules.id,
+      title: schedules.title,
+      startDate: schedules.startDate,
+      startTime: schedules.startTime,
+      location: schedules.location,
+      scheduleStatus: schedules.scheduleStatus,
+      userId: schedules.userId,
+      relatedType: schedules.relatedType,
+      relatedId: schedules.relatedId,
+    })
+    .from(schedules)
+    .innerJoin(
+      tasks,
+      and(
+        eq(schedules.relatedType, 'task'),
+        eq(schedules.relatedId, tasks.id)
+      )
+    )
+    .where(and(
+      eq(tasks.assigneeId, userId),
+      eq(schedules.startDate, today),
+      sql`${schedules.scheduleStatus} NOT IN ('completed', 'cancelled')`,
+      isNull(tasks.deletedAt)
+    ))
+    .limit(4);
+
+  // 去重合并：排除已通过 buildScheduleAccessCondition 获取到的日程
+  const mergedSchedules = [
+    ...focusSchedules,
+    ...taskLinkedSchedulesToday.filter((s) => !focusScheduleIds.has(s.id)),
+  ];
+
   const inboxFeed = await getWorkbenchInboxFeed({ userId, limit: 12 });
   const focusQueue = buildFocusQueue({
     todoRows: focusTodos,
     taskRows: focusTasks,
-    scheduleRows: focusSchedules,
+    scheduleRows: mergedSchedules,
     today,
   });
 

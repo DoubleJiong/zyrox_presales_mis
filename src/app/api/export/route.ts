@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { customers, projects, users, todos, schedules, projectTypes } from '@/db/schema';
+import { customers, customerTypes, projects, users, todos, schedules, subsidiaries } from '@/db/schema';
 import { isNull, eq, and, gte, lte, between, sql } from 'drizzle-orm';
 import * as XLSX from 'xlsx';
 import {
   getProjectCustomerTypeOrIndustryLabel,
   getProjectStageLabel,
   getProjectStatusLabel,
+  getRegionLabel,
 } from '@/lib/project-field-mappings';
 import { getProjectTypeDisplayLabel } from '@/lib/project-type-codec';
+import { FUND_SOURCE_ITEMS } from '@/lib/config/dictionary-config';
 
 /**
  * 通用数据导出 API
@@ -55,28 +57,31 @@ async function getCustomersData(startDate?: string, endDate?: string) {
     .select({
       客户编号: customers.customerId,
       客户名称: customers.customerName,
-      区域: customers.region,
-      状态: customers.status,
+      客户类型: customerTypes.name,
+      所属地区: customers.region,
+      客户状态: customers.status,
       历史中标总额: customers.totalAmount,
       当前跟进项目数: customers.currentProjectCount,
-      最大中标金额: customers.maxProjectAmount,
+      历史最大中标金额: customers.maxProjectAmount,
       联系人: customers.contactName,
       联系电话: customers.contactPhone,
       联系邮箱: customers.contactEmail,
-      地址: customers.address,
-      描述: customers.description,
+      详细地址: customers.address,
+      客户描述: customers.description,
       创建时间: customers.createdAt,
       更新时间: customers.updatedAt,
     })
     .from(customers)
+    .leftJoin(customerTypes, eq(customers.customerTypeId, customerTypes.id))
     .where(and(...conditions));
 
   // 状态转换
   return results.map(r => ({
     ...r,
-    状态: r.状态 === 'active' ? '活跃' : r.状态 === 'inactive' ? '非活跃' : r.状态 === 'potential' ? '潜在' : '流失',
+    客户类型: r.客户类型 || '',
+    客户状态: r.客户状态 === 'active' ? '活跃' : r.客户状态 === 'inactive' ? '非活跃' : r.客户状态 === 'potential' ? '潜在' : '流失',
     历史中标总额: r.历史中标总额 ? `¥${Number(r.历史中标总额).toLocaleString()}` : '¥0',
-    最大中标金额: r.最大中标金额 ? `¥${Number(r.最大中标金额).toLocaleString()}` : '¥0',
+    历史最大中标金额: r.历史最大中标金额 ? `¥${Number(r.历史最大中标金额).toLocaleString()}` : '¥0',
     创建时间: r.创建时间 ? new Date(r.创建时间).toLocaleString('zh-CN') : '',
     更新时间: r.更新时间 ? new Date(r.更新时间).toLocaleString('zh-CN') : '',
   }));
@@ -91,16 +96,15 @@ async function getProjectsData(startDate?: string, endDate?: string) {
       项目编号: projects.projectCode,
       项目名称: projects.projectName,
       客户名称: projects.customerName,
-      项目类型: projectTypes.name,
+      项目类型: projects.projectType,
       项目类型代码: projects.projectType,
       项目阶段: projects.projectStage,
       '客户类型/行业': projects.industry,
       区域: projects.region,
-      项目状态: projects.status,
       优先级: projects.priority,
       进度: projects.progress,
       '预计金额': projects.estimatedAmount,
-      实际金额: projects.actualAmount,
+      中标金额: projects.actualAmount,
       合同金额: projects.contractAmount,
       开始日期: projects.startDate,
       结束日期: projects.endDate,
@@ -108,26 +112,27 @@ async function getProjectsData(startDate?: string, endDate?: string) {
       风险说明: projects.risks,
       创建时间: projects.createdAt,
       更新时间: projects.updatedAt,
+      资金来源代码: projects.fundSource,
+      承接公司: subsidiaries.subsidiaryName,
     })
     .from(projects)
-    .leftJoin(projectTypes, eq(projects.projectTypeId, projectTypes.id))
+    .leftJoin(subsidiaries, eq(projects.contractingCompanyId, subsidiaries.id))
     .where(and(...conditions));
 
   return results.map(r => ({
     项目编号: r.项目编号,
     项目名称: r.项目名称,
     客户名称: r.客户名称,
-    项目类型: r.项目类型 || (r.项目类型代码
+    '项目类型 / OA 分类': r.项目类型代码
       ? r.项目类型代码.split(',').map((c: string) => getProjectTypeDisplayLabel(c.trim())).join('/')
-      : ''),
+      : '',
     项目阶段: getProjectStageLabel(r.项目阶段),
     '客户类型/行业': getProjectCustomerTypeOrIndustryLabel(r['客户类型/行业']),
-    区域: r.区域,
-    项目状态: getProjectStatusLabel(r.项目状态),
+    区域: getRegionLabel(r.区域),
     优先级: r.优先级 === 'urgent' ? '紧急' : r.优先级 === 'high' ? '高' : r.优先级 === 'medium' ? '中' : '低',
     进度: `${r.进度}%`,
     '预计金额': r['预计金额'] ? `¥${Number(r['预计金额']).toLocaleString()}` : '',
-    实际金额: r.实际金额 ? `¥${Number(r.实际金额).toLocaleString()}` : '',
+    中标金额: r.中标金额 ? `¥${Number(r.中标金额).toLocaleString()}` : '',
     合同金额: r.合同金额 ? `¥${Number(r.合同金额).toLocaleString()}` : '',
     开始日期: r.开始日期 || '',
     结束日期: r.结束日期 || '',
@@ -135,6 +140,8 @@ async function getProjectsData(startDate?: string, endDate?: string) {
     风险说明: r.风险说明,
     创建时间: r.创建时间 ? new Date(r.创建时间).toLocaleString('zh-CN') : '',
     更新时间: r.更新时间 ? new Date(r.更新时间).toLocaleString('zh-CN') : '',
+    资金来源: FUND_SOURCE_ITEMS.find(i => i.code === r.资金来源代码)?.name || r.资金来源代码 || '',
+    承接公司: r.承接公司 || '',
   }));
 }
 

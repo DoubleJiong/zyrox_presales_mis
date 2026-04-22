@@ -202,7 +202,6 @@ describe('projects route', () => {
     expect(response.status).toBe(200);
     expect(updatePayloads).toHaveLength(1);
     expect(updatePayloads[0]).toMatchObject({
-      projectTypeId: 2,
       projectType: 'software',
     });
   });
@@ -222,7 +221,6 @@ describe('projects route', () => {
     expect(response.status).toBe(200);
     expect(updatePayloads).toHaveLength(1);
     expect(updatePayloads[0]).toMatchObject({
-      projectTypeId: 2,
       projectType: 'software,integration',
     });
   });

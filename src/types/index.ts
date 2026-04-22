@@ -22,38 +22,6 @@ export interface Customer {
   createdBy: string; // 创建人ID
 }
 
-// 项目阶段枚举
-export enum ProjectStage {
-  LEAD = 'lead', // 线索
-  QUALIFIED = 'qualified', // 已确认
-  PROPOSAL = 'proposal', // 方案阶段
-  DEMO = 'demo', // 演示阶段
-  NEGOTIATION = 'negotiation', // 招标投标
-  WON = 'won', // 成功
-  LOST = 'lost', // 失败
-  ON_HOLD = 'on_hold', // 暂停
-}
-
-// 项目信息
-export interface Project {
-  id: string;
-  customerId: string; // 关联客户
-  name: string;
-  description: string;
-  stage: ProjectStage;
-  probability: number; // 成功概率 0-100
-  expectedValue: number; // 预期价值（万元）
-  actualValue: number; // 实际价值
-  startDate: Date;
-  expectedCloseDate: Date;
-  actualCloseDate?: Date;
-  assignedTo: string; // 售前负责人
-  solutionEngineer?: string; // 解决方案工程师
-  createdAt: Date;
-  updatedAt: Date;
-  createdBy: string;
-}
-
 // 售前人员信息
 export interface Staff {
   id: string;
@@ -144,6 +112,7 @@ export interface DashboardStats {
     score: number;
     wonAmount: number;
   }>;
-  recentProjects: Project[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  recentProjects: any[];
   pendingReviews: number; // 待审核方案数
 }

@@ -578,7 +578,7 @@ export default function SolutionDetailPage() {
       return;
     }
     try {
-      const response = await fetch(`/api/users?keyword=${encodeURIComponent(keyword)}`);
+      const response = await fetch(`/api/users?keyword=${encodeURIComponent(keyword)}&purpose=member_search`);
       if (response.ok) {
         const data = await response.json();
         setAvailableUsers(data.data || data || []);
@@ -594,7 +594,7 @@ export default function SolutionDetailPage() {
       return;
     }
     try {
-      const response = await fetch(`/api/users?keyword=${encodeURIComponent(keyword)}`);
+      const response = await fetch(`/api/users?keyword=${encodeURIComponent(keyword)}&purpose=member_search`);
       if (response.ok) {
         const data = await response.json();
         setReviewerOptions(data.data || data || []);
@@ -666,11 +666,12 @@ export default function SolutionDetailPage() {
 
   const canEdit = userPermission?.permissions.canEdit;
   const pendingReview = getPendingReview();
+  // 当前用户被指定为待审评审人时，即可执行审核操作（不要求加入方案团队）
   const canActOnPendingReview =
     solution.status === 'reviewing' &&
     !!pendingReview &&
-    !!userPermission?.permissions.canApprove &&
-    pendingReview.reviewerId === userPermission?.currentUserId;
+    !!userPermission?.currentUserId &&
+    userPermission.currentUserId === pendingReview?.reviewerId;
 
   return (
     <div className="flex flex-col h-[calc(100vh-2rem)]" data-testid="solution-detail-page">

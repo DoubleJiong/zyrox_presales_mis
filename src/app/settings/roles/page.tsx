@@ -69,6 +69,41 @@ function isSystemRoleCode(roleCode: string) {
   return SYSTEM_ROLE_CODES.has(roleCode.toLowerCase());
 }
 
+/**
+ * 将 DB 中存储的权限字符串数组（可能是旧格式 customers.[star]/projects.[star] 或新格式 customer:view）
+ * 转换为 PERMISSION_DEFINITIONS 中的规范 code 列表，供编辑弹窗的 checkbox 初始化使用。
+ * 逻辑与 rbac.ts::hasPermission 的 variant 扩展保持一致。
+ */
+function resolvePermissionCodes(storedPerms: string[], allPerms: Permission[]): string[] {
+  if (!storedPerms || storedPerms.length === 0) return [];
+  if (storedPerms.includes('*')) return ['*'];
+
+  return allPerms
+    .filter(p => {
+      if (storedPerms.includes(p.code)) return true;
+      const colonIdx = p.code.indexOf(':');
+      if (colonIdx === -1) return false;
+      const module = p.code.slice(0, colonIdx);
+      const action = p.code.slice(colonIdx + 1);
+
+      // 标准变体（与 rbac.ts::hasPermission 对齐）
+      const variants: string[] = [
+        `${module}:*`, `${module}s:*`,
+        `${module}s.*`, `${module}.*`,
+        `${module}s.${action}`, `${module}.${action}`,
+      ];
+      // 兼容旧格式 staff.* → user:* 映射
+      if (module === 'user') {
+        variants.push(
+          'staff:*', 'staffs:*', 'staffs.*', 'staff.*',
+          `staff:${action}`, `staffs.${action}`, `staff.${action}`,
+        );
+      }
+      return variants.some(v => storedPerms.includes(v));
+    })
+    .map(p => p.code);
+}
+
 export default function RolesSettings() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -178,7 +213,16 @@ export default function RolesSettings() {
       description: role.description || '',
       status: role.status,
     });
-    setSelectedPermissions(role.permissions || []);
+    // 容错处理：permissions 可能是 string[]（JSONB 解析后）或 string（未解析字符串）
+    let rawPerms: string[] = [];
+    if (Array.isArray(role.permissions)) {
+      rawPerms = role.permissions;
+    } else if (typeof role.permissions === 'string') {
+      try { rawPerms = JSON.parse(role.permissions as unknown as string); } catch {}
+    }
+    const resolvedPerms = resolvePermissionCodes(rawPerms, permissions);
+    // 若 permissions 列表未加载完毕导致解析结果为空，直接使用原始存储值（格式已匹配时可用）
+    setSelectedPermissions(resolvedPerms.length > 0 ? resolvedPerms : rawPerms);
     setIsDialogOpen(true);
   };
 

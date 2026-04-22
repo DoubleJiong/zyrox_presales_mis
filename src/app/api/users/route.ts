@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { users, roles, staffProfiles, userRoles } from '@/db/schema';
+import { users, roles, staffProfiles, userRoles, messages } from '@/db/schema';
 import { desc, eq, inArray, and, sql } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { withAuth } from '@/lib/auth-middleware';
 import { DataPermissionService, DataScope } from '@/lib/permissions/data-scope';
 import { ADMIN_ROLE_CODES } from '@/lib/permissions/types';
 import { markAdminPasswordReset, markInitialPasswordLifecycle } from '@/modules/identity/password-lifecycle-service';
+import { clearPermissionCache } from '@/lib/rbac';
 
 async function syncUsersIdSequence() {
   await db.execute(sql`
@@ -101,6 +102,8 @@ export const GET = withAuth(async (request, { userId }) => {
     const keyword = searchParams.get('keyword');
     const roleCodes = searchParams.get('roleCodes'); // 支持按角色代码筛选，逗号分隔
     const includeRoles = searchParams.get('includeRoles') === 'true';
+    // purpose=member_search: 用于添加团队成员/设置评审人，允许搜索所有活跃用户
+    const isMemberSearch = searchParams.get('purpose') === 'member_search';
     
     // 解析角色代码参数
     const roleCodeList = roleCodes ? roleCodes.split(',').map(r => r.trim()) : [];
@@ -124,6 +127,25 @@ export const GET = withAuth(async (request, { userId }) => {
     const searchCondition = keyword 
       ? sql`(${users.realName} ILIKE ${`%${keyword}%`} OR ${users.email} ILIKE ${`%${keyword}%`} OR ${users.username} ILIKE ${`%${keyword}%`})`
       : null;
+
+    // 添加团队成员/评审人场景：允许搜索所有活跃用户（仅返回基础信息）
+    if (isMemberSearch && keyword) {
+      userList = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          realName: users.realName,
+          email: users.email,
+          department: users.department,
+          status: users.status,
+          roleId: users.roleId,
+        })
+        .from(users)
+        .where(and(eq(users.status, 'active'), searchCondition!))
+        .orderBy(desc(users.createdAt))
+        .limit(30);
+      return successResponse(userList);
+    }
 
     // 如果是按角色代码搜索且是有效的角色代码，则绕过数据权限限制
     if (isValidRoleSearch) {
@@ -260,6 +282,24 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
 
     await markInitialPasswordLifecycle(newUser.id, userId);
 
+    // 系统通知：新账号创建
+    try {
+      await db.insert(messages).values({
+        title: '欢迎加入系统',
+        content: `您的账号（${username}）已由管理员创建，首次登录后请立即修改初始密码。`,
+        type: 'system',
+        category: 'system',
+        priority: 'normal',
+        receiverId: newUser.id,
+        senderId: userId,
+        isRead: false,
+        isDeleted: false,
+        updatedAt: new Date(),
+      });
+    } catch (msgErr) {
+      console.error('[Users] Failed to write account creation message:', msgErr);
+    }
+
     if (Array.isArray(roleIds) && roleIds.length > 0) {
       await db.insert(userRoles).values(
         roleIds.map((roleId: number) => ({
@@ -342,6 +382,31 @@ export const PUT = withAuth(async (request: NextRequest, { userId }) => {
 
     if (password) {
       await markAdminPasswordReset(id, userId);
+    }
+
+    // 角色变更后立即清除该用户的服务端权限缓存，确保新权限实时生效
+    if (roleIds !== undefined) {
+      clearPermissionCache(id);
+    }
+
+    // 角色变更通知（馓知被操作用户，不馓知自己）
+    if (roleIds !== undefined && updatedUser.id !== userId) {
+      try {
+        await db.insert(messages).values({
+          title: '账号权限已更新',
+          content: `您的账号权限已被管理员更新，如有疑问请联系系统管理员。`,
+          type: 'system',
+          category: 'system',
+          priority: 'normal',
+          receiverId: updatedUser.id,
+          senderId: userId,
+          isRead: false,
+          isDeleted: false,
+          updatedAt: new Date(),
+        });
+      } catch (msgErr) {
+        console.error('[Users] Failed to write role change message:', msgErr);
+      }
     }
 
     return successResponse({

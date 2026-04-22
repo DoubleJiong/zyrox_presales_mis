@@ -12,6 +12,24 @@ import { eq } from 'drizzle-orm';
 import { authenticate } from '@/lib/auth';
 import { checkSolutionPermission } from '@/lib/solution-permissions';
 import JSZip from 'jszip';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
+// 判断是否本地存储 URL（相对路径）
+function isLocalUrl(url: string): boolean {
+  return url.startsWith('/local-uploads/');
+}
+
+// 从本地文件系统读取文件内容
+async function readLocalFile(url: string): Promise<Buffer | null> {
+  try {
+    const relativePath = url.startsWith('/') ? url.slice(1) : url;
+    const filePath = path.join(process.cwd(), 'public', ...relativePath.split('/'));
+    return await fs.readFile(filePath);
+  } catch {
+    return null;
+  }
+}
 
 // GET /api/solutions/[id]/download-all - 打包下载所有文件
 export async function GET(
@@ -97,23 +115,36 @@ export async function GET(
           return;
         }
 
-        const response = await fetch(file.fileUrl, {
-          headers: {
-            'User-Agent': 'Solution-Management-System/1.0',
-          },
-        });
+        let fileBuffer: Buffer | null = null;
 
-        if (!response.ok) {
-          console.warn(`下载文件 ${file.fileName} 失败: ${response.status}`);
-          return;
+        if (isLocalUrl(file.fileUrl)) {
+          // 本地存储：直接读取文件系统
+          fileBuffer = await readLocalFile(file.fileUrl);
+          if (!fileBuffer) {
+            console.warn(`本地文件 ${file.fileName} 不存在: ${file.fileUrl}`);
+            return;
+          }
+        } else {
+          // 远程存储：通过 HTTP 下载
+          const response = await fetch(file.fileUrl, {
+            headers: {
+              'User-Agent': 'Solution-Management-System/1.0',
+            },
+          });
+
+          if (!response.ok) {
+            console.warn(`下载文件 ${file.fileName} 失败: ${response.status}`);
+            return;
+          }
+
+          const arrayBuffer = await response.arrayBuffer();
+          fileBuffer = Buffer.from(arrayBuffer);
         }
 
-        const blob = await response.blob();
-        
         // 按子方案分组存储
         const folder = zip.folder(file.subSchemeName);
         if (folder) {
-          folder.file(file.fileName, blob);
+          folder.file(file.fileName, fileBuffer);
         }
       } catch (error) {
         console.error(`下载文件 ${file.fileName} 出错:`, error);
@@ -123,8 +154,8 @@ export async function GET(
     await Promise.all(downloadPromises);
 
     // 生成 ZIP 文件
-    const zipBlob = await zip.generateAsync({
-      type: 'blob',
+    const zipBuffer = await zip.generateAsync({
+      type: 'nodebuffer',
       compression: 'DEFLATE',
       compressionOptions: {
         level: 6, // 压缩级别 1-9
@@ -135,12 +166,12 @@ export async function GET(
     recordDownloadStatistics(solutionId, user.id).catch(console.error);
 
     // 返回 ZIP 文件
-    return new NextResponse(zipBlob, {
+    return new NextResponse(new Uint8Array(zipBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="solution_${solutionId}_files.zip"`,
-        'Content-Length': String(zipBlob.size),
+        'Content-Length': String(zipBuffer.length),
       },
     });
   } catch (error) {

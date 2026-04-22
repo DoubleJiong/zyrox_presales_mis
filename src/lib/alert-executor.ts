@@ -1,543 +1,558 @@
 /**
- * 预警规则执行器
- * 负责检查预警规则并生成预警记录
+ * Alert Executor �?Phase 2 rewrite
+ *
+ * Two entry points:
+ *  1. executeThresholdRule(ruleId)  �?called by pg-boss cron worker (wired in Phase 3)
+ *  2. executeSignalAlert(data)      �?called by pg-boss signal worker (wired in Phase 3)
+ *
+ * Strict mode (Plan A): only processes rules where sceneTemplate IS NOT NULL.
+ * Legacy rules using ruleType + ruleCategory are silently ignored.
+ *
+ * Dedup guard: skips creating a new alert if a 'pending' or 'acknowledged' alert
+ * already exists for the same ruleId + targetId.
+ *
+ * Auto-close: on each threshold scan, existing open alerts whose targets no longer
+ * satisfy the condition are set to 'auto_closed'.
  */
 
 import { db } from '@/db';
-import { alertRules, alertHistories, alertNotifications, projects, customers, users } from '@/db/schema';
-import { eq, and, gt, lt, isNull, isNotNull, sql, inArray } from 'drizzle-orm';
+import { alertRules, alertHistories, projects, customers, messages } from '@/db/schema';
+import {
+  eq, and, lt, lte, gte, isNull, isNotNull, inArray, or, sql,
+} from 'drizzle-orm';
 
 import { OPEN_PROJECT_LIFECYCLE_STAGES } from '@/lib/project-reporting';
+import { alertNotifier } from '@/lib/alert-notifier';
 
-// =====================================================
-// 类型定义
-// =====================================================
+// ── Sequence self-heal ────────────────────────────────────────
 
-export interface AlertRuleCondition {
-  field: string;
-  operator: 'gt' | 'lt' | 'eq' | 'gte' | 'lte' | 'contains' | 'not_contains';
-  value: number | string;
-  unit?: 'day' | 'hour' | 'week' | 'month' | 'count';
+async function resetAlertHistoryIdSequence() {
+  await db.execute(sql.raw(`
+    SELECT setval(
+      pg_get_serial_sequence('bus_alert_history', 'id'),
+      COALESCE((SELECT MAX(id) FROM bus_alert_history), 0) + 1,
+      false
+    )
+  `));
 }
 
-export interface AlertExecutionContext {
-  ruleId: number;
-  ruleName: string;
-  ruleCode: string;
-  ruleType: string;
-  severity: string;
-  notificationChannels: string[];
-  recipientIds: number[];
+function isAlertHistorySequenceDriftError(error: unknown) {
+  const dbError = error as { cause?: { code?: string; constraint_name?: string } };
+  return dbError?.cause?.code === '23505' &&
+    dbError?.cause?.constraint_name === 'bus_alert_history_pkey';
 }
 
-export interface AlertResult {
-  triggered: boolean;
+// ── Types ─────────────────────────────────────────────────────
+
+type AlertRule = typeof alertRules.$inferSelect;
+
+/** Payload put into the 'alert-signal' pg-boss job by business write paths (Phase 3). */
+export interface SignalAlertJobData {
+  sceneTemplate: string;
   targetId: number;
+  targetType: string;
   targetName: string;
-  currentValue: any;
-  thresholdValue: any;
-  condition: string;
+  alertData?: Record<string, unknown>;
 }
 
-// =====================================================
-// 预警规则执行器
-// =====================================================
+/** Internal representation of one matched target for a threshold rule. */
+interface TriggeredTarget {
+  name: string;
+  targetType: string;
+  message: string;
+  alertData: Record<string, unknown>;
+}
+
+// Statuses that mean "this alert still needs human attention"
+const OPEN_STATUSES = ['pending', 'acknowledged'] as const;
+
+// ── Utilities ─────────────────────────────────────────────────
+
+/** Convert (value, unit) to a number of calendar days. */
+function toDays(value: number, unit: string): number {
+  if (unit === 'week') return value * 7;
+  if (unit === 'month') return value * 30;
+  return value; // 'day' or anything unrecognised
+}
+
+function buildContent(ruleName: string, targetName: string, message: string): string {
+  return `【预警�?{ruleName} �?${targetName}�?{message}`;
+}
+
+// ── Executor ──────────────────────────────────────────────────
 
 export class AlertExecutor {
+  // ╔══════════════════════════════════════════════════════════╗
+  // �? Threshold entry point                                   �?  // ╚══════════════════════════════════════════════════════════╝
+
   /**
-   * 执行所有活跃的预警规则
+   * Execute one threshold rule by id.
+   * Called per-rule by a pg-boss cron worker (registered in Phase 3).
+   *
+   * Strict mode: silently returns if the rule has no sceneTemplate.
    */
-  async executeAllRules(): Promise<{
-    rulesChecked: number;
-    alertsCreated: number;
-    results: Array<{ ruleId: number; ruleName: string; alertsCreated: number }>;
-  }> {
-    // 获取所有活跃的预警规则
-    const activeRules = await db
+  async executeThresholdRule(ruleId: number): Promise<void> {
+    const [rule] = await db
       .select()
       .from(alertRules)
-      .where(and(eq(alertRules.status, 'active'), isNull(alertRules.deletedAt)));
+      .where(
+        and(
+          eq(alertRules.id, ruleId),
+          eq(alertRules.status, 'active'),
+          isNull(alertRules.deletedAt),
+        ),
+      )
+      .limit(1);
 
-    const results: Array<{ ruleId: number; ruleName: string; alertsCreated: number }> = [];
-    let totalAlertsCreated = 0;
+    if (!rule?.sceneTemplate || rule.triggerType !== 'threshold') return;
 
-    for (const rule of activeRules) {
-      try {
-        const alertsCreated = await this.executeRule(rule);
-        results.push({
-          ruleId: rule.id,
-          ruleName: rule.ruleName,
-          alertsCreated: alertsCreated.length,
-        });
-        totalAlertsCreated += alertsCreated.length;
+    // 1. Which targets currently satisfy the trigger condition?
+    const triggered = await this.fetchTriggeredTargets(rule);
 
-        // 更新规则触发次数
-        if (alertsCreated.length > 0) {
-          await db
-            .update(alertRules)
-            .set({
-              lastTriggeredAt: new Date(),
-              triggerCount: sql`${alertRules.triggerCount} + ${alertsCreated.length}`,
-              updatedAt: new Date(),
-            })
-            .where(eq(alertRules.id, rule.id));
-        }
-      } catch (error) {
-        console.error(`执行预警规则 ${rule.ruleName} 失败:`, error);
+    // 2. All currently-open alerts for this rule
+    const openAlerts = await db
+      .select({ id: alertHistories.id, targetId: alertHistories.targetId })
+      .from(alertHistories)
+      .where(
+        and(
+          eq(alertHistories.ruleId, rule.id),
+          inArray(alertHistories.status, [...OPEN_STATUSES]),
+          isNull(alertHistories.deletedAt),
+        ),
+      );
+
+    const triggeredIds = new Set([...triggered.keys()]);
+    const openByTarget = new Map(
+      openAlerts
+        .filter((a): a is typeof a & { targetId: number } => a.targetId != null)
+        .map((a) => [a.targetId, a.id]),
+    );
+
+    // 3. Auto-close alerts whose condition is no longer met
+    for (const [targetId, alertId] of openByTarget) {
+      if (!triggeredIds.has(targetId)) {
+        await db
+          .update(alertHistories)
+          .set({
+            status: 'auto_closed',
+            autoClosedAt: new Date(),
+            autoClosedReason: `检查条件已解除（场景：${rule.sceneTemplate}），系统自动关闭`,
+            updatedAt: new Date(),
+          })
+          .where(eq(alertHistories.id, alertId));
       }
     }
 
-    return {
-      rulesChecked: activeRules.length,
-      alertsCreated: totalAlertsCreated,
-      results,
-    };
-  }
+    // 4. Create new alerts for newly-triggered targets (dedup: skip if open alert exists)
+    let newCount = 0;
+    for (const [targetId, target] of triggered) {
+      if (openByTarget.has(targetId)) continue;
 
-  /**
-   * 执行单个预警规则
-   */
-  async executeRule(rule: typeof alertRules.$inferSelect): Promise<Array<typeof alertHistories.$inferSelect>> {
-    switch (rule.ruleType) {
-      case 'project':
-        return this.executeProjectRule(rule);
-      case 'customer':
-        return this.executeCustomerRule(rule);
-      case 'user':
-        return this.executeUserRule(rule);
-      case 'opportunity':
-        return this.executeOpportunityRule(rule);
-      default:
-        console.warn(`未知的预警规则类型: ${rule.ruleType}`);
-        return [];
-    }
-  }
-
-  /**
-   * 执行项目相关预警规则
-   */
-  private async executeProjectRule(
-    rule: typeof alertRules.$inferSelect
-  ): Promise<Array<typeof alertHistories.$inferSelect>> {
-    const alerts: Array<typeof alertHistories.$inferSelect> = [];
-
-    // 根据规则分类执行不同的检查逻辑
-    switch (rule.ruleCategory) {
-      case 'not_updated':
-        // 项目长期未更新
-        alerts.push(...(await this.checkProjectNotUpdated(rule)));
-        break;
-      case 'overdue':
-        // 项目超期未交付
-        alerts.push(...(await this.checkProjectOverdue(rule)));
-        break;
-      case 'inactive':
-        // 项目长期无活动
-        alerts.push(...(await this.checkProjectInactive(rule)));
-        break;
-      default:
-        console.warn(`未知的项目预警分类: ${rule.ruleCategory}`);
-    }
-
-    return alerts;
-  }
-
-  /**
-   * 检查项目长期未更新
-   */
-  private async checkProjectNotUpdated(
-    rule: typeof alertRules.$inferSelect
-  ): Promise<Array<typeof alertHistories.$inferSelect>> {
-    const daysThreshold = rule.thresholdValue;
-    const thresholdDate = new Date();
-    thresholdDate.setDate(thresholdDate.getDate() - daysThreshold);
-
-    // 查询长期未更新的项目（排除已完成和已取消的项目）
-    const staleProjects = await db
-      .select()
-      .from(projects)
-      .where(
-        and(
-          lt(projects.updatedAt, thresholdDate),
-          isNull(projects.deletedAt),
-          inArray(projects.projectStage, OPEN_PROJECT_LIFECYCLE_STAGES)
-        )
-      );
-
-    const alerts: Array<typeof alertHistories.$inferSelect> = [];
-
-    for (const project of staleProjects) {
-      // 检查是否已存在相同项目的未处理预警
-      const existingAlert = await db
-        .select()
-        .from(alertHistories)
-        .where(
-          and(
-            eq(alertHistories.ruleId, rule.id),
-            eq(alertHistories.targetId, project.id),
-            eq(alertHistories.status, 'pending'),
-            isNull(alertHistories.deletedAt)
-          )
-        )
-        .limit(1);
-
-      if (existingAlert.length > 0) continue;
-
-      // 创建预警记录
-      const daysSinceUpdate = Math.floor(
-        (Date.now() - project.updatedAt.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      const [alert] = await db
-        .insert(alertHistories)
-        .values({
+      const insertValues = {
           ruleId: rule.id,
           ruleName: rule.ruleName,
-          targetType: 'project',
-          targetId: project.id,
-          targetName: project.projectName,
+          alertType: rule.sceneTemplate,
+          targetType: target.targetType,
+          targetId,
+          targetName: target.name,
           severity: rule.severity,
-          status: 'pending',
-          alertData: {
-            condition: `${rule.conditionField} > ${rule.thresholdValue} ${rule.thresholdUnit}`,
-            currentValue: `${daysSinceUpdate} days ago`,
-            thresholdValue: rule.thresholdValue,
-            thresholdUnit: rule.thresholdUnit,
-            projectStage: project.projectStage,
-            projectStatus: project.status,
-            lastUpdated: project.updatedAt.toISOString(),
-          },
-        })
-        .returning();
+          status: 'pending' as const,
+          message: target.message,
+          alertData: target.alertData,
+        };
 
-      alerts.push(alert);
-
-      // 创建预警通知
-      await this.createNotifications(alert, rule);
-    }
-
-    return alerts;
-  }
-
-  /**
-   * 检查项目超期未交付
-   */
-  private async checkProjectOverdue(
-    rule: typeof alertRules.$inferSelect
-  ): Promise<Array<typeof alertHistories.$inferSelect>> {
-    const daysThreshold = rule.thresholdValue;
-    const thresholdDate = new Date();
-    thresholdDate.setHours(0, 0, 0, 0);
-    thresholdDate.setDate(thresholdDate.getDate() - daysThreshold);
-    const thresholdDateString = thresholdDate.toISOString().split('T')[0];
-
-    // 查询超期未交付的项目
-    const overdueProjects = await db
-      .select()
-      .from(projects)
-      .where(
-        and(
-          isNotNull(projects.expectedDeliveryDate),
-          lt(projects.expectedDeliveryDate, thresholdDateString),
-          inArray(projects.projectStage, OPEN_PROJECT_LIFECYCLE_STAGES),
-          isNull(projects.deletedAt)
-        )
-      );
-
-    const alerts: Array<typeof alertHistories.$inferSelect> = [];
-
-    for (const project of overdueProjects) {
-      // 检查是否已存在相同项目的未处理预警
-      const existingAlert = await db
-        .select()
-        .from(alertHistories)
-        .where(
-          and(
-            eq(alertHistories.ruleId, rule.id),
-            eq(alertHistories.targetId, project.id),
-            eq(alertHistories.status, 'pending'),
-            isNull(alertHistories.deletedAt)
-          )
-        )
-        .limit(1);
-
-      if (existingAlert.length > 0) continue;
-
-      // 计算超期天数
-      const deliveryDate = new Date(project.expectedDeliveryDate!);
-      const daysOverdue = Math.floor((Date.now() - deliveryDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      // 创建预警记录
-      const [alert] = await db
-        .insert(alertHistories)
-        .values({
-          ruleId: rule.id,
-          ruleName: rule.ruleName,
-          targetType: 'project',
-          targetId: project.id,
-          targetName: project.projectName,
-          severity: rule.severity,
-          status: 'pending',
-          alertData: {
-            condition: `expected_delivery_date < NOW() - ${rule.thresholdValue} ${rule.thresholdUnit}`,
-            currentValue: `${daysOverdue} days overdue`,
-            thresholdValue: rule.thresholdValue,
-            thresholdUnit: rule.thresholdUnit,
-            projectStage: project.projectStage,
-            projectStatus: project.status,
-            expectedDeliveryDate: project.expectedDeliveryDate,
-          },
-        })
-        .returning();
-
-      alerts.push(alert);
-
-      // 创建预警通知
-      await this.createNotifications(alert, rule);
-    }
-
-    return alerts;
-  }
-
-  /**
-   * 检查项目长期无活动
-   */
-  private async checkProjectInactive(
-    rule: typeof alertRules.$inferSelect
-  ): Promise<Array<typeof alertHistories.$inferSelect>> {
-    // TODO: 实现项目长期无活动检查逻辑
-    return [];
-  }
-
-  /**
-   * 执行客户相关预警规则
-   */
-  private async executeCustomerRule(
-    rule: typeof alertRules.$inferSelect
-  ): Promise<Array<typeof alertHistories.$inferSelect>> {
-    const alerts: Array<typeof alertHistories.$inferSelect> = [];
-
-    switch (rule.ruleCategory) {
-      case 'inactive':
-        // 客户长期未跟进
-        alerts.push(...(await this.checkCustomerInactive(rule)));
-        break;
-      case 'not_updated':
-        // 客户信息长期未更新
-        alerts.push(...(await this.checkCustomerNotUpdated(rule)));
-        break;
-      default:
-        console.warn(`未知的客户预警分类: ${rule.ruleCategory}`);
-    }
-
-    return alerts;
-  }
-
-  /**
-   * 检查客户长期未跟进
-   */
-  private async checkCustomerInactive(
-    rule: typeof alertRules.$inferSelect
-  ): Promise<Array<typeof alertHistories.$inferSelect>> {
-    const daysThreshold = rule.thresholdValue;
-    const thresholdDate = new Date();
-    thresholdDate.setDate(thresholdDate.getDate() - daysThreshold);
-
-    // 查询长期未跟进的客户
-    const inactiveCustomersResult = await db.execute(sql`
-      SELECT c.*, 
-             MAX(sa.activity_date) as last_activity_date
-      FROM ${customers} c
-      LEFT JOIN bus_staff_activity sa ON c.id = sa.customer_id AND sa.deleted_at IS NULL
-      WHERE c.deleted_at IS NULL
-        AND c.status = 'active'
-      GROUP BY c.id
-      HAVING MAX(sa.activity_date) IS NULL 
-         OR MAX(sa.activity_date) < ${thresholdDate.toISOString().split('T')[0]}
-    `);
-
-    const alerts: Array<typeof alertHistories.$inferSelect> = [];
-
-    // 处理结果 - Drizzle 返回的直接是数组
-    const inactiveCustomers = Array.isArray(inactiveCustomersResult) 
-      ? inactiveCustomersResult 
-      : (inactiveCustomersResult as any).rows || [];
-
-    for (const customer of inactiveCustomers) {
-      // 检查是否已存在相同客户的未处理预警
-      const existingAlert = await db
-        .select()
-        .from(alertHistories)
-        .where(
-          and(
-            eq(alertHistories.ruleId, rule.id),
-            eq(alertHistories.targetId, customer.id),
-            eq(alertHistories.status, 'pending'),
-            isNull(alertHistories.deletedAt)
-          )
-        )
-        .limit(1);
-
-      if (existingAlert.length > 0) continue;
-
-      // 计算未跟进天数
-      const lastActivityDate = customer.last_activity_date
-        ? new Date(customer.last_activity_date)
-        : customer.created_at
-          ? new Date(customer.created_at)
-          : new Date();
-      const daysSinceActivity = Math.floor(
-        (Date.now() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      // 创建预警记录
-      const [alert] = await db
-        .insert(alertHistories)
-        .values({
-          ruleId: rule.id,
-          ruleName: rule.ruleName,
-          targetType: 'customer',
-          targetId: customer.id,
-          targetName: customer.customer_name,
-          severity: rule.severity,
-          status: 'pending',
-          alertData: {
-            condition: `last_activity_date > ${rule.thresholdValue} ${rule.thresholdUnit}`,
-            currentValue: `${daysSinceActivity} days since last activity`,
-            thresholdValue: rule.thresholdValue,
-            thresholdUnit: rule.thresholdUnit,
-            lastActivityDate: customer.last_activity_date || 'never',
-          },
-        })
-        .returning();
-
-      alerts.push(alert);
-
-      // 创建预警通知
-      await this.createNotifications(alert, rule);
-    }
-
-    return alerts;
-  }
-
-  /**
-   * 检查客户信息长期未更新
-   */
-  private async checkCustomerNotUpdated(
-    rule: typeof alertRules.$inferSelect
-  ): Promise<Array<typeof alertHistories.$inferSelect>> {
-    // TODO: 实现客户信息长期未更新检查逻辑
-    return [];
-  }
-
-  /**
-   * 执行用户相关预警规则
-   */
-  private async executeUserRule(
-    rule: typeof alertRules.$inferSelect
-  ): Promise<Array<typeof alertHistories.$inferSelect>> {
-    // TODO: 实现用户相关预警规则
-    return [];
-  }
-
-  /**
-   * 执行商机相关预警规则
-   */
-  private async executeOpportunityRule(
-    rule: typeof alertRules.$inferSelect
-  ): Promise<Array<typeof alertHistories.$inferSelect>> {
-    // TODO: 实现商机相关预警规则
-    return [];
-  }
-
-  /**
-   * 创建预警通知
-   */
-  private async createNotifications(
-    alert: typeof alertHistories.$inferSelect,
-    rule: typeof alertRules.$inferSelect
-  ): Promise<void> {
-    const recipientIds = rule.recipientIds || [];
-
-    if (recipientIds.length === 0) return;
-
-    const channels = rule.notificationChannels || ['system'];
-    const notifications: Array<typeof alertNotifications.$inferSelect> = [];
-
-    for (const recipientId of recipientIds) {
-      for (const channel of channels) {
-        const content = this.generateNotificationContent(alert, channel);
-
-        const [notification] = await db
-          .insert(alertNotifications)
-          .values({
-            alertHistoryId: alert.id,
-            recipientId,
-            channel,
-            status: 'pending',
-            content,
-          })
+      let created: typeof alertHistories.$inferSelect;
+      try {
+        [created] = await db
+          .insert(alertHistories)
+          .values(insertValues)
           .returning();
-
-        notifications.push(notification);
+      } catch (insertErr) {
+        if (!isAlertHistorySequenceDriftError(insertErr)) throw insertErr;
+        await resetAlertHistoryIdSequence();
+        [created] = await db
+          .insert(alertHistories)
+          .values(insertValues)
+          .returning();
       }
+
+      await alertNotifier.notifyInApp(
+        created.id,
+        rule.recipientIds ?? [],
+        buildContent(rule.ruleName, target.name, target.message),
+      );
+
+      // 将预警同步写入 sys_message，使消息中心可展示预警类消息
+      const alertRecipients = rule.recipientIds ?? [];
+      if (alertRecipients.length > 0) {
+        try {
+          const alertContent = buildContent(rule.ruleName, target.name, target.message);
+          const alertPriority =
+            rule.severity === 'critical' ? 'urgent'
+            : rule.severity === 'high' ? 'high'
+            : rule.severity === 'medium' ? 'normal' : 'low';
+          await db.insert(messages).values(
+            alertRecipients.map((receiverId) => ({
+              title: `预警触发：${rule.ruleName}`,
+              content: alertContent,
+              type: 'alert' as const,
+              category: 'project',
+              priority: alertPriority as 'urgent' | 'high' | 'normal' | 'low',
+              receiverId,
+              relatedType: target.targetType,
+              relatedId: targetId,
+              relatedName: target.name,
+              actionUrl: '/alerts/histories?status=pending',
+              actionText: '查看预警',
+              isRead: false,
+              isDeleted: false,
+              updatedAt: new Date(),
+            }))
+          );
+        } catch (msgErr) {
+          console.error('[alert-executor] Failed to write sys_message for threshold alert:', msgErr);
+        }
+      }
+
+      newCount++;
     }
 
-    // 尝试发送通知
-    await this.sendNotifications(notifications);
-  }
-
-  /**
-   * 生成通知内容
-   */
-  private generateNotificationContent(
-    alert: typeof alertHistories.$inferSelect,
-    channel: string
-  ): string {
-    const alertData = alert.alertData as any;
-
-    switch (channel) {
-      case 'email':
-        return `【预警通知】${alert.ruleName}\n\n目标: ${alert.targetName}\n严重程度: ${alert.severity}\n当前状态: ${alertData?.currentValue || '未知'}\n\n请及时处理。`;
-      case 'sms':
-        return `【预警】${alert.ruleName} - ${alert.targetName}，严重程度: ${alert.severity}`;
-      case 'system':
-      default:
-        return `${alert.ruleName}: ${alert.targetName} (${alert.severity})`;
+    // 5. Update rule stats
+    if (newCount > 0) {
+      await db
+        .update(alertRules)
+        .set({
+          lastTriggeredAt: new Date(),
+          triggerCount: sql`${alertRules.triggerCount} + ${newCount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(alertRules.id, rule.id));
     }
   }
 
+  // ╔══════════════════════════════════════════════════════════╗
+  // �? Signal entry point                                      �?  // ╚══════════════════════════════════════════════════════════╝
+
   /**
-   * 发送通知
+   * Execute a signal alert for a given business event.
+   * Called by the pg-boss 'alert-signal' worker (registered in Phase 3).
+   *
+   * Finds every active signal rule whose sceneTemplate matches the event,
+   * then creates one alert per rule (dedup: skips if open alert already exists
+   * for the same ruleId + targetId).
    */
-  private async sendNotifications(
-    notifications: Array<typeof alertNotifications.$inferSelect>
-  ): Promise<void> {
-    for (const notification of notifications) {
+  async executeSignalAlert(data: SignalAlertJobData): Promise<void> {
+    const matchingRules = await db
+      .select()
+      .from(alertRules)
+      .where(
+        and(
+          eq(alertRules.sceneTemplate, data.sceneTemplate),
+          eq(alertRules.triggerType, 'signal'),
+          eq(alertRules.status, 'active'),
+          isNull(alertRules.deletedAt),
+        ),
+      );
+
+    for (const rule of matchingRules) {
+      // Dedup guard
+      const [existing] = await db
+        .select({ id: alertHistories.id })
+        .from(alertHistories)
+        .where(
+          and(
+            eq(alertHistories.ruleId, rule.id),
+            eq(alertHistories.targetId, data.targetId),
+            inArray(alertHistories.status, [...OPEN_STATUSES]),
+            isNull(alertHistories.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      if (existing) continue;
+
+      const message =
+        (data.alertData?.message as string | undefined) ??
+        `${data.targetName} 触发�?${rule.ruleName} 预警`;
+
+      const signalInsertValues = {
+          ruleId: rule.id,
+          ruleName: rule.ruleName,
+          alertType: rule.sceneTemplate,
+          targetType: data.targetType,
+          targetId: data.targetId,
+          targetName: data.targetName,
+          severity: rule.severity,
+          status: 'pending' as const,
+          message,
+          alertData: data.alertData ?? {},
+        };
+
+      let created: typeof alertHistories.$inferSelect;
       try {
-        // 这里可以集成实际的发送逻辑
-        // 例如：邮件服务、短信服务、系统消息推送等
-        // 目前先标记为已发送
-        await db
-          .update(alertNotifications)
-          .set({
-            status: 'sent',
-            sentAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(alertNotifications.id, notification.id));
-      } catch (error) {
-        console.error(`发送通知失败 (ID: ${notification.id}):`, error);
-        await db
-          .update(alertNotifications)
-          .set({
-            status: 'failed',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-            updatedAt: new Date(),
-          })
-          .where(eq(alertNotifications.id, notification.id));
+        [created] = await db
+          .insert(alertHistories)
+          .values(signalInsertValues)
+          .returning();
+      } catch (insertErr) {
+        if (!isAlertHistorySequenceDriftError(insertErr)) throw insertErr;
+        await resetAlertHistoryIdSequence();
+        [created] = await db
+          .insert(alertHistories)
+          .values(signalInsertValues)
+          .returning();
       }
+
+      await alertNotifier.notifyInApp(
+        created.id,
+        rule.recipientIds ?? [],
+        buildContent(rule.ruleName, data.targetName, message),
+      );
+
+      // 将预警同步写入 sys_message
+      const signalRecipients = rule.recipientIds ?? [];
+      if (signalRecipients.length > 0) {
+        try {
+          const signalContent = buildContent(rule.ruleName, data.targetName, message);
+          const signalPriority =
+            rule.severity === 'critical' ? 'urgent'
+            : rule.severity === 'high' ? 'high'
+            : rule.severity === 'medium' ? 'normal' : 'low';
+          await db.insert(messages).values(
+            signalRecipients.map((receiverId) => ({
+              title: `预警触发：${rule.ruleName}`,
+              content: signalContent,
+              type: 'alert' as const,
+              category: 'project',
+              priority: signalPriority as 'urgent' | 'high' | 'normal' | 'low',
+              receiverId,
+              relatedType: data.targetType,
+              relatedId: data.targetId,
+              relatedName: data.targetName,
+              actionUrl: '/alerts/histories?status=pending',
+              actionText: '查看预警',
+              isRead: false,
+              isDeleted: false,
+              updatedAt: new Date(),
+            }))
+          );
+        } catch (msgErr) {
+          console.error('[alert-executor] Failed to write sys_message for signal alert:', msgErr);
+        }
+      }
+
+      await db
+        .update(alertRules)
+        .set({
+          lastTriggeredAt: new Date(),
+          triggerCount: sql`${alertRules.triggerCount} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(alertRules.id, rule.id));
     }
+  }
+
+  // ╔══════════════════════════════════════════════════════════╗
+  // �? Template implementations                                �?  // ╚══════════════════════════════════════════════════════════╝
+
+  private async fetchTriggeredTargets(
+    rule: AlertRule,
+  ): Promise<Map<number, TriggeredTarget>> {
+    switch (rule.sceneTemplate) {
+      case 'project_not_updated':
+        return this.tplProjectNotUpdated(rule);
+      case 'project_overdue':
+        return this.tplProjectOverdue(rule);
+      case 'project_near_deadline':
+        return this.tplProjectNearDeadline(rule);
+      case 'customer_inactive':
+        return this.tplCustomerInactive(rule);
+      default:
+        console.warn(`[alert-executor] Unknown sceneTemplate: ${rule.sceneTemplate}`);
+        return new Map();
+    }
+  }
+
+  // ── template: project_not_updated ────────────────────────────
+  // Condition: updatedAt < now �?N days  AND  stage is open
+  private async tplProjectNotUpdated(
+    rule: AlertRule,
+  ): Promise<Map<number, TriggeredTarget>> {
+    const days = toDays(rule.thresholdValue, rule.thresholdUnit);
+    const cutoff = new Date(Date.now() - days * 86_400_000);
+
+    const rows = await db
+      .select({
+        id: projects.id,
+        projectName: projects.projectName,
+        updatedAt: projects.updatedAt,
+        projectStage: projects.projectStage,
+      })
+      .from(projects)
+      .where(
+        and(
+          isNull(projects.deletedAt),
+          inArray(projects.projectStage, [...OPEN_PROJECT_LIFECYCLE_STAGES]),
+          lt(projects.updatedAt, cutoff),
+        ),
+      );
+
+    const result = new Map<number, TriggeredTarget>();
+    for (const row of rows) {
+      const daysSince = Math.floor((Date.now() - row.updatedAt.getTime()) / 86_400_000);
+      result.set(row.id, {
+        name: row.projectName,
+        targetType: 'project',
+        message: `项目已超�?${daysSince} 天未更新（阈值：${days} 天）`,
+        alertData: {
+          daysSinceUpdate: daysSince,
+          thresholdDays: days,
+          projectStage: row.projectStage,
+          lastUpdated: row.updatedAt.toISOString(),
+        },
+      });
+    }
+    return result;
+  }
+
+  // ── template: project_overdue ────────────────────────────────
+  // Condition: expectedDeliveryDate < today  AND  stage is open
+  private async tplProjectOverdue(
+    rule: AlertRule,
+  ): Promise<Map<number, TriggeredTarget>> {
+    // rule.thresholdValue is unused for this template (overdue = delivery date passed at all)
+    void rule;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const rows = await db
+      .select({
+        id: projects.id,
+        projectName: projects.projectName,
+        expectedDeliveryDate: projects.expectedDeliveryDate,
+        projectStage: projects.projectStage,
+      })
+      .from(projects)
+      .where(
+        and(
+          isNull(projects.deletedAt),
+          isNotNull(projects.expectedDeliveryDate),
+          inArray(projects.projectStage, [...OPEN_PROJECT_LIFECYCLE_STAGES]),
+          lt(projects.expectedDeliveryDate, todayStr),
+        ),
+      );
+
+    const result = new Map<number, TriggeredTarget>();
+    for (const row of rows) {
+      const deliveryDate = new Date(row.expectedDeliveryDate!);
+      const daysOverdue = Math.floor((Date.now() - deliveryDate.getTime()) / 86_400_000);
+      result.set(row.id, {
+        name: row.projectName,
+        targetType: 'project',
+        message: `项目已超�?${daysOverdue} 天（预期交付日：${row.expectedDeliveryDate}）`,
+        alertData: {
+          daysOverdue,
+          expectedDeliveryDate: row.expectedDeliveryDate,
+          projectStage: row.projectStage,
+        },
+      });
+    }
+    return result;
+  }
+
+  // ── template: project_near_deadline ─────────────────────────
+  // Condition: today �?expectedDeliveryDate �?today + N days  AND  stage is open
+  private async tplProjectNearDeadline(
+    rule: AlertRule,
+  ): Promise<Map<number, TriggeredTarget>> {
+    const days = toDays(rule.thresholdValue, rule.thresholdUnit);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const upperStr = new Date(Date.now() + days * 86_400_000).toISOString().split('T')[0];
+
+    const rows = await db
+      .select({
+        id: projects.id,
+        projectName: projects.projectName,
+        expectedDeliveryDate: projects.expectedDeliveryDate,
+        projectStage: projects.projectStage,
+      })
+      .from(projects)
+      .where(
+        and(
+          isNull(projects.deletedAt),
+          isNotNull(projects.expectedDeliveryDate),
+          inArray(projects.projectStage, [...OPEN_PROJECT_LIFECYCLE_STAGES]),
+          gte(projects.expectedDeliveryDate, todayStr),   // not yet overdue
+          lte(projects.expectedDeliveryDate, upperStr),   // within N days
+        ),
+      );
+
+    const result = new Map<number, TriggeredTarget>();
+    for (const row of rows) {
+      const deliveryDate = new Date(row.expectedDeliveryDate!);
+      const daysRemaining = Math.ceil((deliveryDate.getTime() - Date.now()) / 86_400_000);
+      result.set(row.id, {
+        name: row.projectName,
+        targetType: 'project',
+        message: `项目距截止日期还�?${daysRemaining} 天（截止日：${row.expectedDeliveryDate}）`,
+        alertData: {
+          daysRemaining,
+          thresholdDays: days,
+          expectedDeliveryDate: row.expectedDeliveryDate,
+          projectStage: row.projectStage,
+        },
+      });
+    }
+    return result;
+  }
+
+  // ── template: customer_inactive ──────────────────────────────
+  // Condition: lastInteractionTime < now �?N days
+  //            (or: lastInteractionTime IS NULL AND createdAt < now �?N days)
+  //            AND status = 'active'
+  private async tplCustomerInactive(
+    rule: AlertRule,
+  ): Promise<Map<number, TriggeredTarget>> {
+    const days = toDays(rule.thresholdValue, rule.thresholdUnit);
+    const cutoff = new Date(Date.now() - days * 86_400_000);
+
+    const rows = await db
+      .select({
+        id: customers.id,
+        customerName: customers.customerName,
+        lastInteractionTime: customers.lastInteractionTime,
+        createdAt: customers.createdAt,
+      })
+      .from(customers)
+      .where(
+        and(
+          isNull(customers.deletedAt),
+          eq(customers.status, 'active'),
+          or(
+            and(
+              isNull(customers.lastInteractionTime),
+              lt(customers.createdAt, cutoff),
+            ),
+            lt(customers.lastInteractionTime, cutoff),
+          ),
+        ),
+      );
+
+    const result = new Map<number, TriggeredTarget>();
+    for (const row of rows) {
+      const lastTime = row.lastInteractionTime ?? row.createdAt;
+      const daysSince = Math.floor((Date.now() - lastTime.getTime()) / 86_400_000);
+      result.set(row.id, {
+        name: row.customerName,
+        targetType: 'customer',
+        message: `客户已超�?${daysSince} 天未跟进（阈值：${days} 天）`,
+        alertData: {
+          daysSinceLastInteraction: daysSince,
+          thresholdDays: days,
+          lastInteractionTime: row.lastInteractionTime?.toISOString() ?? null,
+        },
+      });
+    }
+    return result;
   }
 }
 

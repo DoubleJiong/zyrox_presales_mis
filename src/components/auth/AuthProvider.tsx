@@ -208,9 +208,18 @@ export function RequireAuth({ children, permissions = [], fallback = null }: Req
   if (permissions.length > 0 && !hasAnyPermission(permissions)) {
     return fallback || (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">权限不足</h2>
-          <p className="text-muted-foreground">您没有访问此页面的权限</p>
+        <div className="text-center max-w-sm p-6">
+          <div className="flex justify-center mb-4">
+            <div className="rounded-full bg-muted p-4">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+            </div>
+          </div>
+          <h2 className="text-xl font-semibold mb-2">没有访问权限</h2>
+          <p className="text-sm text-muted-foreground mb-5">您没有权限访问此页面。如需申请权限，请联系系统管理员。</p>
+          <div className="flex gap-3 justify-center">
+            <button onClick={() => typeof window !== 'undefined' && window.history.back()} className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors">返回上一页</button>
+            <a href="/" className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">回到首页</a>
+          </div>
         </div>
       </div>
     );

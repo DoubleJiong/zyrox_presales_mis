@@ -6,6 +6,7 @@ import { uploadFile, getFileUrl } from '@/lib/storage';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { canReadProject, canWriteProject } from '@/lib/permissions/project';
+import { notifyMentions } from '@/lib/messages/mention-notifier';
 
 // Next.js App Router 不支持 api.bodyParser 配置
 // 文件大小限制在代码中处理
@@ -74,8 +75,7 @@ export const GET = withAuth(async (
         sa.trip_cost as "tripCost",
         sa.created_at as "createdAt"
       FROM bus_staff_activity sa
-      LEFT JOIN bus_staff_profile sp ON sa.staff_id = sp.id
-      LEFT JOIN sys_user u ON sp.user_id = u.id
+      LEFT JOIN sys_user u ON sa.staff_id = u.id
       LEFT JOIN bus_customer c ON sa.customer_id = c.id
       LEFT JOIN bus_project p ON sa.project_id = p.id
       WHERE sa.project_id = ${projectId} AND sa.deleted_at IS NULL
@@ -323,8 +323,8 @@ export const POST = withAuth(async (
       }
     }
 
-    // 处理日期格式
-    const activityDate = new Date(followTime).toISOString().split('T')[0];
+    // 处理日期格式：直接取前10位，避免时区转换导致日期偏移
+    const activityDate = followTime.slice(0, 10);
 
     // 创建跟进记录 - 自动关联项目的客户
     const result = await db.execute(sql`
@@ -355,13 +355,14 @@ export const POST = withAuth(async (
 
     const newRecord = Array.isArray(result) ? result[0] : result;
 
-    // 更新客户的最近互动时间（如果有客户）
+    // 更新客户的最近互动时间（如果有客户，且只向前推进，不允许历史记录覆盖更新的时间）
     if (projectCustomerId) {
       await db.execute(sql`
         UPDATE bus_customer
         SET last_interaction_time = ${activityDate}::timestamp,
             updated_at = NOW()
         WHERE id = ${projectCustomerId}
+          AND (last_interaction_time IS NULL OR last_interaction_time < ${activityDate}::timestamp)
       `);
     }
 
@@ -373,6 +374,17 @@ export const POST = withAuth(async (
         console.warn('Failed to generate file URL:', error);
       }
     }
+
+    // @提及通知：解析 followContent 中的 @姓名 并写入 sys_message
+    await notifyMentions({
+      text: followContent,
+      authorId: context.userId,
+      title: `${followerName} 在跟进记录中提及了您`,
+      actionUrl: `/projects/${projectId}`,
+      actionText: '查看项目',
+      relatedType: 'project',
+      relatedId: projectId,
+    });
 
     return NextResponse.json({
       success: true,

@@ -25,7 +25,7 @@ import {
   FileText,
   Calendar,
   Building2,
-  DollarSign,
+  Banknote,
   User,
   MapPin,
 } from 'lucide-react';
@@ -262,7 +262,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
 
                 <div>
                   <p className="text-sm text-muted-foreground flex items-center gap-1">
-                    <DollarSign className="h-3 w-3" /> 合同金额
+                    <Banknote className="h-3 w-3" /> 合同金额
                   </p>
                   <p className="font-medium text-green-600">{formatAmount(contract.contractAmount)}</p>
                 </div>

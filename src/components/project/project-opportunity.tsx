@@ -31,7 +31,7 @@ import {
   Target,
   TrendingUp,
   Calendar,
-  DollarSign,
+  Banknote,
   Plus,
   X,
   AlertTriangle,
@@ -378,7 +378,7 @@ export function ProjectOpportunity({ projectId }: ProjectOpportunityProps) {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
+                <Banknote className="h-5 w-5" />
                 预期金额
               </CardTitle>
               <CardDescription>预期的项目成交金额</CardDescription>

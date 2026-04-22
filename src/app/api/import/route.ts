@@ -60,7 +60,8 @@ async function importProjects(data: Record<string, any>[]) {
       const [inserted] = await db.insert(projects).values({
         projectCode,
         projectName: item.projectName || '未命名项目',
-        status: item.status || 'planning',
+        projectStage: item.projectStage || 'opportunity',
+        status: item.status || 'lead',
         priority: item.priority || 'medium',
         customerId: item.customerId ? Number(item.customerId) : null,
         managerId: item.managerId ? Number(item.managerId) : null,

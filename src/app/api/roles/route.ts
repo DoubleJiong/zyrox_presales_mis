@@ -4,6 +4,7 @@ import { roles } from '@/db/schema';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
+import { clearAllPermissionCache } from '@/lib/rbac';
 
 const SYSTEM_ROLE_CODES = new Set([
   'admin',
@@ -152,6 +153,9 @@ export const PUT = withAuth(async (
       })
       .where(eq(roles.id, normalizedId))
       .returning();
+
+    // 角色权限变更后清除所有用户的权限缓存，确保新权限实时生效
+    clearAllPermissionCache();
 
     return successResponse(updatedRole);
   } catch (error) {

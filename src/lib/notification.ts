@@ -5,20 +5,17 @@
 
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
+import type { MessageType, MessagePriority } from '@/lib/messages/constants';
 
 // =====================================================
 // 类型定义
 // =====================================================
 
-export type NotificationType = 
-  | 'system'      // 系统通知
-  | 'task'        // 任务通知
-  | 'alert'       // 预警通知
-  | 'approval'    // 审批通知
-  | 'mention'     // @提及
-  | 'message';    // 私信
+/** @deprecated 请使用 @/lib/messages/constants 中的 MessageType */
+export type NotificationType = MessageType;
 
-export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
+/** @deprecated 请使用 @/lib/messages/constants 中的 MessagePriority */
+export type NotificationPriority = MessagePriority;
 
 export interface Notification {
   id: number;

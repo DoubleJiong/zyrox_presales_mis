@@ -49,6 +49,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ProjectBidding } from '@/components/project/project-bidding';
 
 interface BiddingTeamMember {
   id: number;
@@ -201,7 +202,7 @@ export function ProjectBiddingTab({ projectId, readOnly = false, canManageMember
   const searchUsers = async (keyword: string) => {
     try {
       const url = keyword.trim()
-        ? `/api/users?keyword=${encodeURIComponent(keyword.trim())}`
+        ? `/api/users?keyword=${encodeURIComponent(keyword.trim())}&purpose=member_search`
         : '/api/users';
       const { data: result } = await apiClient.get<User[] | { data: User[] }>(url);
       const data = (result as any).data || result;
@@ -422,6 +423,9 @@ export function ProjectBiddingTab({ projectId, readOnly = false, canManageMember
 
   return (
     <div className="space-y-6">
+      {/* 招投标信息 */}
+      <ProjectBidding projectId={projectId} />
+
       {/* 招投标团队 */}
       <Card>
         <CardHeader>

@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { WeeklyReportDialog } from '@/components/weekly-report-dialog';
 import { useAuth } from '@/contexts/auth-context';
+import { getMessageTypeLabel } from '@/lib/messages/constants';
 import {
   Calendar,
   CheckSquare,
@@ -240,18 +241,6 @@ const getSeverityLabel = (severity: string) => {
   return labels[severity] || '中';
 };
 
-const getMessageTypeLabel = (type: string) => {
-  const labels: Record<string, string> = {
-    system: '系统',
-    notification: '通知',
-    alert: '预警',
-    reminder: '提醒',
-    message: '消息',
-  };
-
-  return labels[type] || '消息';
-};
-
 const formatWorkbenchTime = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -299,7 +288,7 @@ export default function WorkbenchPage() {
     },
     {
       title: '消息中心',
-      description: '收拢系统通知、提醒和业务消息。',
+      description: '查看完整收件筱和历史消息。',
       href: '/messages',
       icon: <Mail className="h-5 w-5" />,
       count: stats.unreadMessages,
@@ -879,7 +868,7 @@ export default function WorkbenchPage() {
                 </Button>
                 <Button variant="ghost" size="sm" asChild>
                   <Link href="/messages">
-                    消息中心
+                    {stats.unreadMessages > 0 ? `收件筱（${stats.unreadMessages} 未读）` : '收件筱'}
                     <ArrowRight className="h-4 w-4 ml-1" />
                   </Link>
                 </Button>

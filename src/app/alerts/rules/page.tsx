@@ -74,7 +74,39 @@ interface AlertRule {
   updatedAt: string;
   lastTriggeredAt: string | null;
   triggerCount: number;
+  // Phase 3 fields
+  sceneTemplate: string | null;
+  triggerType: string;
+  cronExpression: string | null;
+  pgBossJobName: string | null;
 }
+
+// Maps sceneTemplate code → inferred triggerType
+const SCENE_TRIGGER_TYPE: Record<string, 'threshold' | 'signal'> = {
+  project_not_updated: 'threshold',
+  project_overdue: 'threshold',
+  project_near_deadline: 'threshold',
+  customer_inactive: 'threshold',
+  project_lost_signal: 'signal',
+};
+
+// cron frequency options (aligned with alert_check_frequency dictionary)
+const CRON_OPTIONS = [
+  { code: 'every_15min',   label: '每15分钟',      cron: '*/15 * * * *' },
+  { code: 'every_30min',   label: '每30分钟',      cron: '*/30 * * * *' },
+  { code: 'hourly',        label: '每小时',         cron: '0 * * * *' },
+  { code: 'daily_morning', label: '每天上午9点',    cron: '0 9 * * *' },
+  { code: 'weekly_monday', label: '每周一上午9点',  cron: '0 9 * * 1' },
+] as const;
+
+// Scene template display name lookup
+const SCENE_TEMPLATE_NAMES: Record<string, string> = {
+  project_not_updated:   '项目长期未更新',
+  project_overdue:       '项目已超预期交付日',
+  project_near_deadline: '项目临近截止日期',
+  customer_inactive:     '客户长期未跟进',
+  project_lost_signal:   '项目发生丢单',
+};
 
 export default function AlertRulesPage() {
   const [rules, setRules] = useState<AlertRule[]>([]);
@@ -102,6 +134,10 @@ export default function AlertRulesPage() {
     notificationChannels: [] as string[],
     recipientIds: [] as number[],
     description: '',
+    // Phase 3
+    sceneTemplate: '',
+    triggerType: 'threshold',
+    cronExpression: '',
   });
 
   useEffect(() => {
@@ -277,6 +313,9 @@ export default function AlertRulesPage() {
       notificationChannels: [],
       recipientIds: [],
       description: '',
+      sceneTemplate: '',
+      triggerType: 'threshold',
+      cronExpression: '',
     });
   };
 
@@ -294,6 +333,9 @@ export default function AlertRulesPage() {
       notificationChannels: rule.notificationChannels || [],
       recipientIds: rule.recipientIds || [],
       description: rule.description,
+      sceneTemplate: rule.sceneTemplate || '',
+      triggerType: rule.triggerType || 'threshold',
+      cronExpression: rule.cronExpression || '',
     });
     setEditDialogOpen(true);
   };
@@ -469,6 +511,7 @@ export default function AlertRulesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>规则名称</TableHead>
+                  <TableHead>场景模板</TableHead>
                   <TableHead>类型</TableHead>
                   <TableHead>条件</TableHead>
                   <TableHead>严重程度</TableHead>
@@ -487,6 +530,20 @@ export default function AlertRulesPage() {
                         <div className="font-medium">{rule.ruleName}</div>
                         <div className="text-xs text-muted-foreground">{rule.ruleCode}</div>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {rule.sceneTemplate ? (
+                        <div>
+                          <div className="text-xs font-medium text-primary">
+                            {SCENE_TEMPLATE_NAMES[rule.sceneTemplate] ?? rule.sceneTemplate}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {rule.triggerType === 'signal' ? '事件驱动' : '定时扫描'}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">无</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -551,7 +608,7 @@ export default function AlertRulesPage() {
                 ))}
                 {filteredRules.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
                       <div className="flex flex-col items-center">
                         <Bell className="h-12 w-12 mb-4 opacity-50" />
                         <p>暂无预警规则</p>
@@ -623,6 +680,61 @@ export default function AlertRulesPage() {
                   placeholder="选择严重程度"
                 />
               </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-3">场景模板</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>场景模板</Label>
+                  <DictSelect
+                    category="alert_scene_template"
+                    value={formData.sceneTemplate}
+                    onValueChange={(value) => {
+                      const inferred = SCENE_TRIGGER_TYPE[value] ?? 'threshold';
+                      setFormData({ ...formData, sceneTemplate: value, triggerType: inferred, cronExpression: inferred === 'signal' ? '' : formData.cronExpression });
+                    }}
+                    placeholder="选择场景模板（可选）"
+                    allowClear
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>触发方式</Label>
+                  <Select
+                    value={formData.triggerType}
+                    onValueChange={(value) => setFormData({ ...formData, triggerType: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="threshold">定时扫描（threshold）</SelectItem>
+                      <SelectItem value="signal">事件驱动（signal）</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {formData.triggerType === 'threshold' && (
+                <div className="mt-3 space-y-2">
+                  <Label>检查频率</Label>
+                  <Select
+                    value={formData.cronExpression}
+                    onValueChange={(value) => setFormData({ ...formData, cronExpression: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择检查频率" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CRON_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.code} value={opt.cron}>
+                          {opt.label}
+                          <span className="ml-2 text-xs text-muted-foreground">{opt.cron}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="border-t pt-4">
@@ -800,6 +912,61 @@ export default function AlertRulesPage() {
                   </Select>
                 </div>
               </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-3">场景模板</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>场景模板</Label>
+                  <DictSelect
+                    category="alert_scene_template"
+                    value={formData.sceneTemplate}
+                    onValueChange={(value) => {
+                      const inferred = SCENE_TRIGGER_TYPE[value] ?? 'threshold';
+                      setFormData({ ...formData, sceneTemplate: value, triggerType: inferred, cronExpression: inferred === 'signal' ? '' : formData.cronExpression });
+                    }}
+                    placeholder="选择场景模板（可选）"
+                    allowClear
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>触发方式</Label>
+                  <Select
+                    value={formData.triggerType}
+                    onValueChange={(value) => setFormData({ ...formData, triggerType: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="threshold">定时扫描（threshold）</SelectItem>
+                      <SelectItem value="signal">事件驱动（signal）</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {formData.triggerType === 'threshold' && (
+                <div className="mt-3 space-y-2">
+                  <Label>检查频率</Label>
+                  <Select
+                    value={formData.cronExpression}
+                    onValueChange={(value) => setFormData({ ...formData, cronExpression: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择检查频率" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CRON_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.code} value={opt.cron}>
+                          {opt.label}
+                          <span className="ml-2 text-xs text-muted-foreground">{opt.cron}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="border-t pt-4">

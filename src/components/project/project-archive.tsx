@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Trophy,
   XCircle,
-  DollarSign,
+  Banknote,
   Calendar,
   Save,
   FileText,
@@ -197,7 +197,7 @@ export function ProjectArchive({ projectId, readOnly = false }: ProjectArchivePr
                   />
                 ) : (
                   <p className="mt-1 text-2xl font-bold flex items-center gap-2 text-green-600">
-                    <DollarSign className="h-5 w-5" />
+                    <Banknote className="h-5 w-5" />
                     {formatCurrency(currentData?.actualAmount)}
                   </p>
                 )}

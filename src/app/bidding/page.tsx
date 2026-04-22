@@ -43,7 +43,6 @@ import {
   Trophy,
   XCircle,
   Clock,
-  DollarSign,
 } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';

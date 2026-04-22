@@ -278,14 +278,16 @@ export const DELETE = withAuth(async (
       }
     }
 
+    const ignoreReason = searchParams.get('ignoreReason') ?? '用户已忽略此预警';
+
     // 将预警标记为忽略
     const [updatedAlert] = await db
       .update(alertHistories)
       .set({
         status: 'ignored',
-        resolvedAt: new Date(),
-        resolvedBy: context.userId,
-        resolutionNote: '用户已忽略此预警',
+        ignoredAt: new Date(),
+        ignoredBy: context.userId,
+        ignoreReason,
         updatedAt: new Date(),
       })
       .where(eq(alertHistories.id, parseInt(id)))

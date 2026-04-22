@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { projects, customers, projectMembers, solutionProjects, users } from '@/db/schema';
+import { projects, customers, projectMembers, solutionProjects, users, subsidiaries } from '@/db/schema';
 import { desc, eq, sql, and, or, inArray, isNull, count, lt } from 'drizzle-orm';
 import { successResponse, errorResponse, validatePagination } from '@/lib/api-response';
 import { withAuth } from '@/lib/auth-middleware';
@@ -107,6 +107,9 @@ export const GET = withAuth(async (req: NextRequest, { userId, user }) => {
       projectStage: projects.projectStage,
       progress: projects.progress,
       risks: projects.risks,
+      fundSource: projects.fundSource,
+      contractingCompanyId: projects.contractingCompanyId,
+      contractingCompanyName: subsidiaries.subsidiaryName,
       createdAt: projects.createdAt,
       updatedAt: projects.updatedAt,
       managerName: users.realName,
@@ -132,6 +135,7 @@ export const GET = withAuth(async (req: NextRequest, { userId, user }) => {
           .select(projectSelectFields)
           .from(projects)
           .leftJoin(users, eq(projects.managerId, users.id))
+          .leftJoin(subsidiaries, eq(projects.contractingCompanyId, subsidiaries.id))
           .where(and(...baseConditions))
           .orderBy(desc(projects.id))
           .limit(cursor ? pageSize + 1 : pageSize)
@@ -182,6 +186,7 @@ export const GET = withAuth(async (req: NextRequest, { userId, user }) => {
           .select(projectSelectFields)
           .from(projects)
           .leftJoin(users, eq(projects.managerId, users.id))
+          .leftJoin(subsidiaries, eq(projects.contractingCompanyId, subsidiaries.id))
           .where(and(...baseConditions))
           .orderBy(desc(projects.id))
           .limit(cursor ? pageSize + 1 : pageSize)
@@ -289,8 +294,8 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
       if (!customerSnapshot.customerName || customerSnapshot.customerName.trim() === '') {
         missingFields.push('客户名称');
       }
-      // 项目类型：支持 projectTypeId 或 projectType
-      if (!body.projectTypeId && requestedProjectTypeCodes.length === 0) {
+      // 项目类型：使用字典 code
+      if (requestedProjectTypeCodes.length === 0) {
         missingFields.push('项目类型');
       }
       if (!body.estimatedAmount) {
@@ -318,19 +323,7 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
       }
     }
 
-    // BUG-016: 验证projectTypeId是否存在
-    if (body.projectTypeId) {
-      const { projectTypes } = await import('@/db/schema');
-      const typeExists = await db
-        .select({ id: projectTypes.id })
-        .from(projectTypes)
-        .where(eq(projectTypes.id, body.projectTypeId))
-        .limit(1);
-      
-      if (typeExists.length === 0) {
-        return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
-      }
-    }
+    // BUG-016: projectTypeId 已废弃，项目类型统一使用字典 code (project_type varchar)
 
     // 生成项目编号（PRJ20260212001格式）
     // 使用数据库序列来避免并发冲突
@@ -391,67 +384,13 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
     const managerId = body.managerId || userId;
     const deliveryManagerId = body.deliveryManagerId || null;
 
-    // 处理项目类型：如果传入的是 projectType 字符串，查找对应的 projectTypeId
-    let projectTypeId = body.projectTypeId || null;
-    let projectTypeCode = serializeProjectTypeCodes(requestedProjectTypeCodes);
-
-    if (body.projectTypeId || requestedProjectTypeCodes.length > 0) {
-      try {
-        const { projectTypes } = await import('@/db/schema');
-        const activeProjectTypes = await db
-          .select({ id: projectTypes.id, code: projectTypes.code, name: projectTypes.name })
-          .from(projectTypes)
-          .where(isNull(projectTypes.deletedAt));
-
-        const resolvedCodes: string[] = [];
-
-        if (body.projectTypeId) {
-          const primaryType = activeProjectTypes.find((item) => item.id === Number(body.projectTypeId));
-          if (!primaryType) {
-            return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
-          }
-          projectTypeId = primaryType.id;
-          if (requestedProjectTypeCodes.length === 0) {
-            resolvedCodes.push(primaryType.code);
-          }
-        }
-
-        requestedProjectTypeCodes.forEach((requestedCode) => {
-          const normalizedRequestedCode = normalizeProjectTypeCode(requestedCode);
-          const matchedType = activeProjectTypes.find((item) => {
-            const normalizedCode = normalizeProjectTypeCode(item.code);
-            const normalizedName = normalizeProjectTypeCode(item.name);
-            return normalizedCode === normalizedRequestedCode
-              || normalizedName === normalizedRequestedCode
-              || `${normalizedName}项目` === normalizedRequestedCode;
-          });
-
-          if (!matchedType) {
-            throw new Error(`PROJECT_TYPE_NOT_FOUND:${requestedCode}`);
-          }
-
-          if (!projectTypeId) {
-            projectTypeId = matchedType.id;
-          }
-
-          if (!resolvedCodes.includes(matchedType.code)) {
-            resolvedCodes.push(matchedType.code);
-          }
-        });
-
-        projectTypeCode = serializeProjectTypeCodes(resolvedCodes);
-      } catch (e) {
-        if (e instanceof Error && e.message.startsWith('PROJECT_TYPE_NOT_FOUND:')) {
-          return errorResponse('BAD_REQUEST', `指定的项目类型不存在: ${e.message.replace('PROJECT_TYPE_NOT_FOUND:', '')}`);
-        }
-        console.error('Failed to find project type ID:', e);
-      }
-    }
+    // 处理项目类型：直接使用字典 code，不再查 sys_project_type 表
+    const projectTypeCode = serializeProjectTypeCodes(requestedProjectTypeCodes);
 
     const idempotencyFingerprint = [
       sanitizedName,
       String(customerSnapshot.customerId ?? customerSnapshot.customerName ?? 'none'),
-      String(projectTypeId ?? projectTypeCode ?? 'none'),
+      String(projectTypeCode ?? 'none'),
       String(managerId),
       String(deliveryManagerId ?? 'none'),
     ].join(':');
@@ -471,8 +410,8 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
         projectName: sanitizedName,
         customerId: customerSnapshot.customerId,
         customerName: customerSnapshot.customerName,
-        projectTypeId: projectTypeId,
-        projectType: projectTypeCode, // 保存项目类型代码，支持逗号分隔的多值协议
+        projectTypeId: null, // deprecated
+        projectType: projectTypeCode, // 字典 code，支持逗号分隔的多值协议
         industry: body.industry || null,
         region: body.region || null,
         description: sanitizedDescription,
@@ -488,6 +427,8 @@ export const POST = withAuth(async (request: NextRequest, { userId }) => {
         priority: body.priority || 'medium',
         progress: 0,
         risks: sanitizedRisks,
+        fundSource: body.fundSource || null,
+        contractingCompanyId: body.contractingCompanyId || null,
       })
       .returning();
 
@@ -538,7 +479,7 @@ export const PUT = withAuth(async (request: NextRequest, context: { userId: numb
     const userId = context.userId;
     const body = await request.json();
     const requestedProjectTypeCodes = normalizeProjectTypeCodes(body.projectTypes ?? body.projectType);
-    const { id, projectName, customerId, customerName, projectTypeId, projectType, industry, region, description, managerId, deliveryManagerId, estimatedAmount, startDate, endDate, expectedDeliveryDate, priority, progress, risks, projectStage } = body;
+    const { id, projectName, customerId, customerName, projectTypeId, projectType, industry, region, description, managerId, deliveryManagerId, estimatedAmount, startDate, endDate, expectedDeliveryDate, priority, progress, risks, projectStage, fundSource, contractingCompanyId } = body;
 
     if (!id) {
       return errorResponse('BAD_REQUEST', '缺少项目ID');
@@ -652,58 +593,12 @@ export const PUT = withAuth(async (request: NextRequest, context: { userId: numb
     let resolvedProjectTypeCode = projectType !== undefined ? projectType : currentProject.projectType;
 
     if (projectTypeId !== undefined || projectType !== undefined || body.projectTypes !== undefined) {
-      const { projectTypes } = await import('@/db/schema');
-      const activeProjectTypes = await db
-        .select({ id: projectTypes.id, code: projectTypes.code, name: projectTypes.name })
-        .from(projectTypes)
-        .where(isNull(projectTypes.deletedAt));
-
-      const resolvedCodes: string[] = [];
-
-      if ((projectType !== undefined || body.projectTypes !== undefined) && projectTypeId === undefined) {
-        resolvedProjectTypeId = undefined;
-      }
-
-      if (resolvedProjectTypeId !== undefined && resolvedProjectTypeId !== null && resolvedProjectTypeId !== '') {
-        const primaryType = activeProjectTypes.find((item) => item.id === Number(resolvedProjectTypeId));
-        if (!primaryType) {
-          return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
-        }
-        resolvedProjectTypeId = primaryType.id;
-        if (requestedProjectTypeCodes.length === 0) {
-          resolvedCodes.push(primaryType.code);
-        }
-      }
-
-      requestedProjectTypeCodes.forEach((requestedCode) => {
-        const normalizedRequestedCode = normalizeProjectTypeCode(requestedCode);
-        const matchedType = activeProjectTypes.find((item) => {
-          const normalizedCode = normalizeProjectTypeCode(item.code);
-          const normalizedName = normalizeProjectTypeCode(item.name);
-          return normalizedCode === normalizedRequestedCode
-            || normalizedName === normalizedRequestedCode
-            || `${normalizedName}项目` === normalizedRequestedCode;
-        });
-
-        if (!matchedType) {
-          throw new Error(`PROJECT_TYPE_NOT_FOUND:${requestedCode}`);
-        }
-
-        if (!resolvedProjectTypeId) {
-          resolvedProjectTypeId = matchedType.id;
-        }
-
-        if (!resolvedCodes.includes(matchedType.code)) {
-          resolvedCodes.push(matchedType.code);
-        }
-      });
-
-      if (!resolvedProjectTypeId) {
-        return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
-      }
-
+      // 项目类型统一使用字典 code，不再查 sys_project_type
+      resolvedProjectTypeId = null; // deprecated
       resolvedProjectTypeCode = serializeProjectTypeCodes(
-        resolvedCodes.length > 0 ? resolvedCodes : normalizeProjectTypeCodes(currentProject.projectType)
+        requestedProjectTypeCodes.length > 0
+          ? requestedProjectTypeCodes
+          : normalizeProjectTypeCodes(projectType ?? currentProject.projectType)
       );
     }
 
@@ -731,6 +626,8 @@ export const PUT = withAuth(async (request: NextRequest, context: { userId: numb
         risks: risks !== undefined ? risks : projectList[0].risks,
         // V1.3: 项目阶段更新
         projectStage: nextLifecycle.projectStage,
+        fundSource: fundSource !== undefined ? (fundSource || null) : projectList[0].fundSource,
+        contractingCompanyId: contractingCompanyId !== undefined ? (contractingCompanyId || null) : projectList[0].contractingCompanyId,
         updatedAt: new Date(),
       })
       .where(eq(projects.id, id))

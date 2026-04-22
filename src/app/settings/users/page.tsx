@@ -146,6 +146,18 @@ export default function UsersSettings() {
       return;
     }
 
+    // 新建用户时必填字段校验
+    if (!editingUser) {
+      if (!formData.username || !formData.email || !formData.name) {
+        alert('用户名、邮箱、姓名为必填项');
+        return;
+      }
+      if (!formData.password) {
+        alert('创建用户时密码不能为空');
+        return;
+      }
+    }
+
     try {
       const payload = {
         username: formData.username,

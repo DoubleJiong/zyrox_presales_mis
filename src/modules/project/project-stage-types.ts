@@ -9,6 +9,7 @@ export const GOVERNED_PROJECT_STAGES = [
   'settlement',
   'archived',
   'cancelled',
+  'suspended',
 ] as const;
 
 export type GovernedProjectStage = (typeof GOVERNED_PROJECT_STAGES)[number];

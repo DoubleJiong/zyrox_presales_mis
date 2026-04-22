@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { quotations, quotationApprovals } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { sendMessage } from '@/lib/messages/send';
+import { OperationLogService } from '@/lib/operation-log-service';
 
 // POST - 审批通过
 export async function POST(
@@ -45,6 +47,36 @@ export async function POST(
           updatedAt: new Date(),
         })
         .where(eq(quotations.id, parseInt(id)));
+    }
+
+    // 通知报价创建人审批结果
+    const [quotationRecord] = await db
+      .select({ createdBy: quotations.createdBy, quotationName: quotations.quotationName })
+      .from(quotations)
+      .where(eq(quotations.id, parseInt(id)));
+
+    if (quotationRecord?.createdBy && quotationRecord.createdBy !== body.approverId) {
+      await sendMessage({
+        receiverId: quotationRecord.createdBy,
+        senderId: body.approverId,
+        title: allApproved ? '您的报价已全部审批通过' : '您的报价审批已通过一级',
+        content: `报价《${quotationRecord.quotationName}》${allApproved ? '已全部审批通过' : '已通过一级审批，等待其他审批人'}。`,
+        type: 'approval',
+        priority: 'normal',
+        relatedType: 'quotation',
+        relatedId: parseInt(id),
+        actionUrl: `/quotations/${id}`,
+        actionText: '查看报价',
+      });
+      // 操作日志
+      OperationLogService.log({
+        userId: body.approverId,
+        module: 'quotation',
+        action: 'approve',
+        resource: 'quotation',
+        resourceId: parseInt(id),
+        status: 'success',
+      }).catch(() => {});
     }
 
     return NextResponse.json({

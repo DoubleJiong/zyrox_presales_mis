@@ -17,7 +17,8 @@ export type GovernedProjectStage =
   | 'delivering'
   | 'settlement'
   | 'archived'
-  | 'cancelled';
+  | 'cancelled'
+  | 'suspended';
 
 export type LegacyProjectStage = 'execution' | 'acceptance';
 export type ProjectStage = GovernedProjectStage | LegacyProjectStage;
@@ -33,19 +34,21 @@ export const PROJECT_STAGE_ORDER: ProjectStage[] = [
   'settlement',
   'archived',
   'cancelled',
+  'suspended',
 ];
 
 export const STAGE_TRANSITIONS: Record<ProjectStage, ProjectStage[]> = {
-  opportunity: ['bidding_pending', 'cancelled'],
-  bidding_pending: ['bidding', 'opportunity', 'cancelled'],
-  bidding: ['solution_review', 'contract_pending', 'cancelled'],
-  solution_review: ['bidding', 'contract_pending', 'cancelled'],
-  contract_pending: ['delivery_preparing', 'bidding', 'cancelled'],
-  delivery_preparing: ['delivering', 'cancelled'],
-  delivering: ['settlement'],
-  settlement: ['archived'],
+  opportunity: ['bidding_pending', 'cancelled', 'suspended'],
+  bidding_pending: ['bidding', 'opportunity', 'cancelled', 'suspended'],
+  bidding: ['solution_review', 'contract_pending', 'cancelled', 'suspended'],
+  solution_review: ['bidding', 'contract_pending', 'cancelled', 'suspended'],
+  contract_pending: ['delivery_preparing', 'bidding', 'cancelled', 'suspended'],
+  delivery_preparing: ['delivering', 'cancelled', 'suspended'],
+  delivering: ['settlement', 'suspended'],
+  settlement: ['archived', 'suspended'],
   archived: [],
   cancelled: [],
+  suspended: ['opportunity', 'bidding_pending', 'bidding', 'solution_review', 'contract_pending', 'delivery_preparing', 'delivering', 'settlement', 'archived', 'cancelled'],
   execution: ['acceptance', 'settlement'],
   acceptance: ['settlement', 'archived'],
 };
@@ -75,6 +78,7 @@ export const PROJECT_STAGE_CONFIG: Record<ProjectStage, { label: string; shortLa
   settlement: { label: '结算中', shortLabel: '结算', color: 'yellow', description: '项目进入结算与收尾。' },
   archived: { label: '已归档', shortLabel: '归档', color: 'gray', description: '项目业务闭环完成，仅允许查询和补录。' },
   cancelled: { label: '已取消', shortLabel: '取消', color: 'gray', description: '项目终止，不再进入后续链路。' },
+  suspended: { label: '已搁置', shortLabel: '搁置', color: 'yellow', description: '项目暂时搁置，待条件具备后可恢复至任意阶段。' },
   execution: { label: '实施阶段', shortLabel: '实施', color: 'green', description: '历史阶段值，保留兼容展示。' },
   acceptance: { label: '验收阶段', shortLabel: '验收', color: 'purple', description: '历史阶段值，保留兼容展示。' },
 };

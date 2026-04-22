@@ -12,6 +12,7 @@ import { db } from '@/db';
 import { solutions } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { sendMessage } from '@/lib/messages/send';
 
 // 参数验证
 const createReviewSchema = z.object({
@@ -108,7 +109,20 @@ export async function POST(
       reviewScore: validated.reviewScore,
       dueDate: validated.dueDate ? new Date(validated.dueDate) : undefined,
     });
-    
+
+    // 通知评审人：有新的方案评审任务
+    await sendMessage({
+      receiverId: validated.reviewerId,
+      title: '您有新的方案评审任务待处理',
+      content: `方案评审任务已分配给您，请尽快完成评审${validated.dueDate ? `，截止日期：${validated.dueDate}` : ''}。`,
+      type: 'approval',
+      priority: 'normal',
+      relatedType: 'solution',
+      relatedId: solutionId,
+      actionUrl: `/solutions/${solutionId}`,
+      actionText: '查看方案',
+    });
+
     return NextResponse.json({
       success: true,
       data: review,

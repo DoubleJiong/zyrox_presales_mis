@@ -10,7 +10,7 @@ describe('data-screen phase2 filters', () => {
     const filters = parseDataScreenPhase2Filters(new URLSearchParams('view=personnel&preset=presales-focus&panel=sales&map=zhejiang&heatmap=contract&startDate=2026-04-01&endDate=2026-04-08&autoRefresh=0'));
 
     expect(filters).toMatchObject({
-      view: 'personnel',
+      view: 'team',
       preset: 'presales-focus',
       panel: 'sales',
       map: 'zhejiang',
@@ -25,7 +25,7 @@ describe('data-screen phase2 filters', () => {
     const filters = parseDataScreenPhase2Filters(new URLSearchParams('view=invalid&preset=broken&panel=unknown&map=earth&heatmap=none&startDate=20260408'));
 
     expect(filters).toMatchObject({
-      view: 'region',
+      view: 'overview',
       preset: 'management',
       panel: 'projects',
       map: 'province-outside',
@@ -38,7 +38,7 @@ describe('data-screen phase2 filters', () => {
 
   it('serializes only non-default URL state while preserving explicit dates', () => {
     const params = buildDataScreenPhase2SearchParams({
-      view: 'personnel',
+      view: 'team',
       preset: 'business-focus',
       panel: 'customers',
       map: 'zhejiang',
@@ -48,7 +48,7 @@ describe('data-screen phase2 filters', () => {
       autoRefresh: false,
     });
 
-    expect(params.toString()).toContain('view=personnel');
+    expect(params.toString()).toContain('view=team');
     expect(params.toString()).toContain('preset=business-focus');
     expect(params.toString()).toContain('panel=customers');
     expect(params.toString()).toContain('map=zhejiang');

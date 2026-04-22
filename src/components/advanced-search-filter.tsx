@@ -66,8 +66,8 @@ export const STATUS_OPTIONS: Record<string, { value: string; label: string; colo
   customers: [
     { value: 'all', label: '全部状态', color: 'default' },
     { value: 'potential', label: '潜在客户', color: 'secondary' },
-    { value: 'active', label: '意向客户', color: 'default' },
-    { value: 'converted', label: '成交客户', color: 'success' },
+    { value: 'active', label: '活跃客户', color: 'default' },
+    { value: 'inactive', label: '非活跃客户', color: 'outline' },
     { value: 'lost', label: '流失客户', color: 'destructive' },
   ],
   projects: [

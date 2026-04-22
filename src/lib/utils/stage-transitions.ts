@@ -111,6 +111,13 @@ export const STAGE_ROLLBACK_RULES: Record<ProjectStage, StageRollbackRule> = {
     preserveData: false,
     notifyRoles: [],
   },
+  suspended: {
+    canRollbackTo: [],
+    requiresReason: false,
+    requiresApproval: false,
+    preserveData: true,
+    notifyRoles: [],
+  },
   execution: {
     canRollbackTo: ['bidding'],
     requiresReason: true,
@@ -237,18 +244,31 @@ export function getAvailableStages(currentStage: ProjectStage): ProjectStage[] {
 export function validateStageTransition(
   fromStage: ProjectStage,
   toStage: ProjectStage,
-  currentStatus: ProjectStatus
+  currentStatus: ProjectStatus,
+  options?: { isSystemAdmin?: boolean }
 ): { valid: boolean; reason?: string; warning?: string } {
   if (fromStage === toStage) {
     return { valid: false, reason: '目标阶段未发生变化' };
   }
 
   if (fromStage === 'archived' || fromStage === 'cancelled') {
+    if (options?.isSystemAdmin) {
+      return {
+        valid: true,
+        warning: `系统管理员覆盖操作：将「${PROJECT_STAGE_CONFIG[fromStage].label}」项目强制切换。请确认业务合规性。`,
+      };
+    }
     return { valid: false, reason: '归档后阶段不可变更' };
   }
 
   if (isGovernedStage(fromStage) && isGovernedStage(toStage)) {
     if (!canTransitionProjectStage(fromStage, toStage)) {
+      if (options?.isSystemAdmin) {
+        return {
+          valid: true,
+          warning: `系统管理员覆盖操作：将项目强制切换至「${PROJECT_STAGE_CONFIG[toStage].label}」。请确认业务合规性。`,
+        };
+      }
       return { valid: false, reason: '不支持的阶段变更' };
     }
 
@@ -334,7 +354,8 @@ export function getRequiredFieldsForStage(stage: ProjectStage, status: ProjectSt
  */
 export function getStageOptions(
   currentStage: ProjectStage,
-  currentStatus: ProjectStatus
+  currentStatus: ProjectStatus,
+  options?: { isSystemAdmin?: boolean }
 ): Array<{
   stage: ProjectStage;
   label: string;
@@ -347,7 +368,7 @@ export function getStageOptions(
   
   return allStages.map(stage => {
     const config = PROJECT_STAGE_CONFIG[stage];
-    const validation = validateStageTransition(currentStage, stage, currentStatus);
+    const validation = validateStageTransition(currentStage, stage, currentStatus, options);
     
     return {
       stage,
@@ -387,12 +408,14 @@ export function canAccessResultTab(
 
   return [
     'bidding',
+    'solution_review',
     'delivery_preparing',
     'delivering',
     'settlement',
     'archived',
     'execution',
     'acceptance',
+    'suspended',
   ].includes(currentStage);
 }
 
@@ -400,14 +423,14 @@ export function canAccessResultTab(
  * 判断项目结算选项卡是否可访问
  */
 export function canAccessSettlementTab(currentStage: ProjectStage): boolean {
-  return currentStage === 'settlement' || currentStage === 'archived';
+  return currentStage === 'settlement' || currentStage === 'archived' || currentStage === 'suspended';
 }
 
 /**
  * 判断实施方案选项卡是否可访问（交付准备中、执行中及之后阶段）
  */
 export function canAccessImplementationPlanTab(currentStage: ProjectStage): boolean {
-  return ['delivery_preparing', 'delivering', 'execution', 'acceptance', 'settlement', 'archived'].includes(currentStage);
+  return ['delivery_preparing', 'delivering', 'execution', 'acceptance', 'settlement', 'archived', 'suspended'].includes(currentStage);
 }
 
 /**

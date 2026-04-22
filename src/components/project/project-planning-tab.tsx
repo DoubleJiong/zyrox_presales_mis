@@ -79,6 +79,11 @@ interface FollowRecord {
   attachments?: Array<{ name: string; url?: string | null; size: number }>;
 }
 
+function toLocalDatetimeLocal(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function formatAttachmentSize(size: number) {
   if (!size) return '-';
   if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(2)} MB`;
@@ -117,7 +122,7 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
   const [newFollow, setNewFollow] = useState({
     followerId: user?.id ?? null as number | null,
     followerName: user?.realName || '',
-    followTime: new Date().toISOString().slice(0, 16),
+    followTime: toLocalDatetimeLocal(new Date()),
     followType: defaultFollowType,
     followContent: '',
     attachment: null as File | null,
@@ -167,11 +172,10 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
         }));
         setTeamMembers(teamMemberList);
         
-        const defaultFollower = teamMemberList.find(m => m.roleCode === 'manager') || teamMemberList[0];
         setNewFollow(prev => ({ 
           ...prev,
-          followerId: defaultFollower?.userId ?? prev.followerId ?? user?.id ?? null,
-          followerName: defaultFollower?.name || prev.followerName || user?.realName || '',
+          followerId: prev.followerId ?? teamMemberList.find(m => m.roleCode === 'manager')?.userId ?? teamMemberList[0]?.userId ?? null,
+          followerName: prev.followerName || teamMemberList.find(m => m.roleCode === 'manager')?.name || teamMemberList[0]?.name || '',
           followType: prev.followType || defaultFollowType,
         }));
       }
@@ -206,7 +210,7 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
   const searchUsers = async (keyword: string) => {
     try {
       const url = keyword.trim()
-        ? `/api/users?keyword=${encodeURIComponent(keyword.trim())}`
+        ? `/api/users?keyword=${encodeURIComponent(keyword.trim())}&purpose=member_search`
         : '/api/users';
       const { data: result } = await apiClient.get<User[] | { data: User[] }>(url);
       const data = (result as any).data || result;
@@ -351,12 +355,11 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
 
       if (response.ok && result.success) {
         await fetchFollowRecords();
-        // 重置表单，默认选择第一个团队成员（优先负责人）
-        const defaultMember = teamMembers.find(m => m.roleCode === 'manager') || teamMembers[0];
+        // 重置表单，默认当前用户
         setNewFollow({
-          followerId: defaultMember?.userId || user?.id || null,
-          followerName: defaultMember?.name || user?.realName || '',
-          followTime: new Date().toISOString().slice(0, 16),
+          followerId: user?.id || null,
+          followerName: user?.realName || '',
+          followTime: toLocalDatetimeLocal(new Date()),
           followType: defaultFollowType,
           followContent: '',
           attachment: null,
@@ -676,11 +679,11 @@ export function ProjectPlanningTab({ projectId, readOnly = false, canManageMembe
                   onValueChange={(value) => {
                     const numericValue = value ? Number(value) : null;
                     const member = followMemberOptions.find(m => m.userId === numericValue);
-                    setNewFollow({ 
-                      ...newFollow, 
+                    setNewFollow(prev => ({ 
+                      ...prev, 
                       followerId: numericValue,
                       followerName: member?.name || '' 
-                    });
+                    }));
                   }}
                 >
                   <SelectTrigger data-testid="planning-follow-follower-trigger">

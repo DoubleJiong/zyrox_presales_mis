@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Check, Circle } from "lucide-react";
+import { Check, Circle, PauseCircle } from "lucide-react";
 import { PROJECT_STAGE_CONFIG, PROJECT_STAGE_ORDER } from "@/lib/utils/status-transitions";
 import {
   Tooltip,
@@ -10,7 +10,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export const PROJECT_STAGES = PROJECT_STAGE_ORDER.map((key) => ({
+// suspended 是跨切状态，不是流程线性节点，从展示数组中过滤
+export const PROJECT_STAGES = PROJECT_STAGE_ORDER
+  .filter((key) => key !== 'suspended')
+  .map((key) => ({
   key,
   label: PROJECT_STAGE_CONFIG[key].label,
   shortLabel: PROJECT_STAGE_CONFIG[key].shortLabel,
@@ -32,6 +35,23 @@ export function ProjectStageProgress({
   showLabels = true,
   className,
 }: ProjectStageProgressProps) {
+  // 搭置阶段：独立展示，不展示线性进度条
+  if (currentStage === 'suspended') {
+    return (
+      <div className={cn("w-full", className)}>
+        <div className="flex items-start gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3">
+          <PauseCircle className="mt-0.5 h-5 w-5 shrink-0 text-yellow-600" />
+          <div>
+            <p className="font-medium text-yellow-800">项目已搁置</p>
+            <p className="mt-0.5 text-sm text-yellow-700">
+              项目暂时进入搁置状态，业务进度与数据均保留中。可通过上方阶段选择器恢复至任意执行阶段继续推进。
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const currentIndex = PROJECT_STAGES.findIndex((s) => s.key === currentStage);
   const progress = currentIndex >= 0 ? ((currentIndex + 1) / PROJECT_STAGES.length) * 100 : 0;
 
@@ -159,7 +179,11 @@ interface ProjectStageBadgeProps {
 }
 
 export function ProjectStageBadge({ stage, size = "md", className }: ProjectStageBadgeProps) {
-  const stageInfo = PROJECT_STAGES.find((s) => s.key === stage);
+  // suspended is filtered from PROJECT_STAGES so look it up directly from config
+  const stageInfo = PROJECT_STAGES.find((s) => s.key === stage)
+    ?? (PROJECT_STAGE_CONFIG[stage as keyof typeof PROJECT_STAGE_CONFIG]
+      ? { key: stage, label: PROJECT_STAGE_CONFIG[stage as keyof typeof PROJECT_STAGE_CONFIG].label, shortLabel: PROJECT_STAGE_CONFIG[stage as keyof typeof PROJECT_STAGE_CONFIG].shortLabel, description: '' }
+      : null);
   
   const sizeConfig = {
     sm: "text-xs px-2 py-0.5",
@@ -179,6 +203,7 @@ export function ProjectStageBadge({ stage, size = "md", className }: ProjectStag
       settlement: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800",
       archived: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-800",
       cancelled: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-800",
+      suspended: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800",
     };
     return colorMap[stageKey] || "bg-muted text-muted-foreground border-border";
   };

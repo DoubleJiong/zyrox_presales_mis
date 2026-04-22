@@ -7,7 +7,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { solutionReviewService } from '@/services/solution-review.service';
+import { db } from '@/db';
+import { solutionReviews, solutions } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { authenticate } from '@/lib/auth';
+import { sendMessage } from '@/lib/messages/send';
 import { z } from 'zod';
 
 // 参数验证
@@ -58,7 +62,37 @@ export async function POST(
       reviewScore: validated.reviewScore,
       reviewCriteria: validated.reviewCriteria,
     });
-    
+
+    // 通知方案作者评审结论
+    const [reviewRecord] = await db
+      .select({ solutionId: solutionReviews.solutionId })
+      .from(solutionReviews)
+      .where(eq(solutionReviews.id, reviewId));
+
+    if (reviewRecord) {
+      const [solutionRecord] = await db
+        .select({ authorId: solutions.authorId, solutionName: solutions.solutionName })
+        .from(solutions)
+        .where(eq(solutions.id, reviewRecord.solutionId));
+
+      if (solutionRecord?.authorId && solutionRecord.authorId !== user.id) {
+        const resultLabel = validated.reviewStatus === 'approved' ? '通过'
+          : validated.reviewStatus === 'rejected' ? '未通过' : '需要修改';
+        await sendMessage({
+          receiverId: solutionRecord.authorId,
+          senderId: user.id,
+          title: `您的方案评审结果：${resultLabel}`,
+          content: validated.reviewComment || `方案《${solutionRecord.solutionName}》评审已完成，结论：${resultLabel}。`,
+          type: 'approval',
+          priority: validated.reviewStatus === 'rejected' ? 'high' : 'normal',
+          relatedType: 'solution',
+          relatedId: reviewRecord.solutionId,
+          actionUrl: `/solutions/${reviewRecord.solutionId}`,
+          actionText: '查看方案',
+        });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: result,

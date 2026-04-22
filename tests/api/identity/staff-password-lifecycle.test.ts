@@ -84,7 +84,7 @@ describe('staff password lifecycle', () => {
     markAdminPasswordReset.mockReset();
   });
 
-  it('marks new accounts as requiring password change', async () => {
+  it('marks new accounts as requiring password change — POST /api/staff now returns 405 (write blocked)', async () => {
     returning.mockResolvedValue([{ id: 12, username: 'new_user' }]);
 
     const { POST } = await import('../../../src/app/api/staff/route');
@@ -99,15 +99,11 @@ describe('staff password lifecycle', () => {
       headers: { 'content-type': 'application/json' },
     }));
 
-    expect(response.status).toBe(200);
-    expect(values).toHaveBeenCalledWith(expect.objectContaining({
-      mustChangePassword: true,
-      passwordResetBy: 99,
-    }));
-    expect(markInitialPasswordLifecycle).toHaveBeenCalledWith(12, 99);
+    // Staff write is blocked; creation is via /settings/users (/api/users)
+    expect(response.status).toBe(405);
   });
 
-  it('marks admin password resets as requiring password change', async () => {
+  it('marks admin password resets as requiring password change — PUT /api/staff now returns 405 (write blocked)', async () => {
     selectWhere.mockResolvedValue([{ id: 12, username: 'existing', realName: '旧用户', email: 'u@example.com', password: 'hashed-old', status: 'active', mustChangePassword: false }]);
     updateReturning.mockResolvedValue([{ id: 12 }]);
 
@@ -121,11 +117,7 @@ describe('staff password lifecycle', () => {
       headers: { 'content-type': 'application/json' },
     }));
 
-    expect(response.status).toBe(200);
-    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({
-      mustChangePassword: true,
-      passwordResetBy: 99,
-    }));
-    expect(markAdminPasswordReset).toHaveBeenCalledWith(12, 99);
+    // Staff write is blocked; password resets go via /api/users/{id}
+    expect(response.status).toBe(405);
   });
 });

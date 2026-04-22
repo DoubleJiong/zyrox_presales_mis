@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { customers } from '@/db/schema';
+import { customers, customerTypes } from '@/db/schema';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { ExportService, ExportColumn, createExportResponse, ExportFormat } from '@/lib/export-service';
 
@@ -9,7 +9,7 @@ interface CustomerExport {
   id: number;
   customerId: string;
   customerName: string;
-  customerTypeId: number | null;
+  customerTypeName: string | null;
   region: string | null;
   contactName: string | null;
   contactPhone: string | null;
@@ -17,6 +17,7 @@ interface CustomerExport {
   address: string | null;
   status: string;
   totalAmount: string | null;
+  maxProjectAmount: string | null;
   currentProjectCount: number;
   createdAt: Date | null;
 }
@@ -25,19 +26,15 @@ interface CustomerExport {
 const exportColumns: ExportColumn<CustomerExport>[] = [
   { key: 'customerId', header: '客户编号', width: 15 },
   { key: 'customerName', header: '客户名称', width: 25 },
-  { 
-    key: 'customerTypeId', 
-    header: '客户类型ID', 
-    width: 12
-  },
-  { key: 'region', header: '区域', width: 12 },
+  { key: 'customerTypeName', header: '客户类型', width: 15 },
+  { key: 'region', header: '所属地区', width: 12 },
   { key: 'contactName', header: '联系人', width: 12 },
   { key: 'contactPhone', header: '联系电话', width: 15 },
   { key: 'contactEmail', header: '联系邮箱', width: 20 },
-  { key: 'address', header: '地址', width: 30 },
+  { key: 'address', header: '详细地址', width: 30 },
   { 
     key: 'status', 
-    header: '状态', 
+    header: '客户状态', 
     width: 10,
     formatter: (value) => {
       const labels: Record<string, string> = {
@@ -53,6 +50,15 @@ const exportColumns: ExportColumn<CustomerExport>[] = [
     key: 'totalAmount', 
     header: '历史中标总额', 
     width: 15,
+    formatter: (value) => {
+      if (!value) return '¥0';
+      return `¥${Number(value).toLocaleString()}`;
+    }
+  },
+  { 
+    key: 'maxProjectAmount', 
+    header: '历史最大中标金额', 
+    width: 18,
     formatter: (value) => {
       if (!value) return '¥0';
       return `¥${Number(value).toLocaleString()}`;
@@ -107,7 +113,7 @@ export async function POST(request: NextRequest) {
         id: customers.id,
         customerId: customers.customerId,
         customerName: customers.customerName,
-        customerTypeId: customers.customerTypeId,
+        customerTypeName: customerTypes.name,
         region: customers.region,
         contactName: customers.contactName,
         contactPhone: customers.contactPhone,
@@ -115,10 +121,12 @@ export async function POST(request: NextRequest) {
         address: customers.address,
         status: customers.status,
         totalAmount: customers.totalAmount,
+        maxProjectAmount: customers.maxProjectAmount,
         currentProjectCount: customers.currentProjectCount,
         createdAt: customers.createdAt,
       })
       .from(customers)
+      .leftJoin(customerTypes, eq(customers.customerTypeId, customerTypes.id))
       .where(and(...conditions))
       .orderBy(customers.id);
 

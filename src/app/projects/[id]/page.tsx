@@ -2,18 +2,20 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ProjectSolutions } from '@/components/project/project-solutions';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiClient } from '@/lib/api-client';
-import { getProjectCustomerTypeOrIndustryLabel } from '@/lib/project-field-mappings';
+import { resolveApiErrorToast } from '@/lib/api-toast';
+import { getProjectCustomerTypeOrIndustryLabel, getRegionLabel } from '@/lib/project-field-mappings';
 import { 
   ArrowLeft, 
   Building2, 
   Calendar, 
-  DollarSign, 
+  Banknote, 
   FileText,
   Users,
   TrendingUp,
@@ -103,7 +105,8 @@ import {
   getStageLabel,
   Priority
 } from '@/lib/utils/project-colors';
-import { getProjectTypeDisplayLabel, getProjectTypeOaCategoryLabel, normalizeProjectTypeCodes } from '@/lib/project-type-codec';
+import { getProjectTypeDisplayLabel, normalizeProjectTypeCodes } from '@/lib/project-type-codec';
+import { FUND_SOURCE_ITEMS } from '@/lib/config/dictionary-config';
 
 interface Project {
   id: number;
@@ -139,6 +142,9 @@ interface Project {
   previousStatus?: string | null; // V2.1: 暂停前的状态
   holdReason?: string | null; // V2.1: 暂停原因
   cancelReason?: string | null; // V2.1: 取消原因
+  fundSource?: string | null;
+  contractingCompanyId?: number | null;
+  contractingCompanyName?: string | null;
   createdAt: string;
   updatedAt: string;
   permissions?: {
@@ -217,6 +223,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const router = useRouter();
   const resolvedParams = use(params);
   const { toast } = useToast();
+  const { user: authUser } = useAuth();
+  const currentUserIsSystemAdmin = ['admin', 'super_admin', 'system_admin'].includes(authUser?.roleCode ?? '');
   const [project, setProject] = useState<Project | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -239,9 +247,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const FOLLOWS_PER_PAGE = 5; // 每次加载5条
   const [addFollowDialogOpen, setAddFollowDialogOpen] = useState(false);
   const [addingFollow, setAddingFollow] = useState(false);
+
+  // 将 Date 格式化为 datetime-local 兼容的本地时间字符串（避免 toISOString 产生 UTC 偏移）
+  const toLocalDatetimeLocal = (date: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
   const [newFollow, setNewFollow] = useState({
     followerName: '',
-    followTime: new Date().toISOString().slice(0, 16),
+    followTime: toLocalDatetimeLocal(new Date()),
     followType: '',
     followContent: '',
     attachment: null as File | null,
@@ -430,20 +444,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         fetchFollowRecords();
       } else {
         // API 返回的错误格式: { success: false, error: { code, message } }
-        const errorMsg = result.error?.message || (typeof result.error === 'string' ? result.error : '删除失败，请稍后重试');
-        toast({
-          variant: 'destructive',
-          title: '删除失败',
-          description: errorMsg,
-        });
+        const { title, description } = resolveApiErrorToast(result.error, '删除失败');
+        toast({ variant: 'destructive', title, description });
       }
     } catch (error) {
       console.error('Failed to delete follow record:', error);
-      toast({
-        variant: 'destructive',
-        title: '删除失败',
-        description: '删除失败，请稍后重试',
-      });
+      toast({ variant: 'destructive', title: '删除失败', description: '删除失败，请稍后重试' });
     }
   };
 
@@ -543,7 +549,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <div className="flex flex-wrap gap-1">
         {codes.map((code) => (
           <Badge key={code} variant="outline">
-            {getProjectTypeDisplayLabel(code)} / {getProjectTypeOaCategoryLabel(code)}
+            {getProjectTypeDisplayLabel(code)}
           </Badge>
         ))}
       </div>
@@ -819,7 +825,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         await fetchFollowRecords();
         setNewFollow({
           followerName: availableUsers[0]?.realName || '',
-          followTime: new Date().toISOString().slice(0, 16),
+          followTime: toLocalDatetimeLocal(new Date()),
           followType: '',
           followContent: '',
           attachment: null,
@@ -877,7 +883,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   return (
     <div className="min-h-screen bg-background">
       {/* 顶部导航栏 */}
-      <div className="border-b bg-card">
+      <div className="sticky top-0 z-30 border-b bg-card shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -897,6 +903,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   currentStage={project.projectStage as ProjectStage}
                   currentStatus={project.status as ProjectStatus}
                   disabled={workflowReadOnly}
+                  isSystemAdmin={currentUserIsSystemAdmin}
                   onStageChange={() => fetchProjectDetail()}
                 />
                 {/* 使用新的优先级选择器组件 */}
@@ -1014,7 +1021,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     <Label className="text-muted-foreground">所在区域</Label>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <p className="font-medium">{project.region || '-'}</p>
+                      <p className="font-medium">{getRegionLabel(project.region) || '-'}</p>
                     </div>
                   </div>
                   <div className="space-y-1">
@@ -1027,14 +1034,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   <div className="space-y-1">
                     <Label className="text-muted-foreground">项目预算</Label>
                     <div className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <Banknote className="h-4 w-4 text-muted-foreground" />
                       <p className="font-medium">{formatCurrency(project.estimatedAmount)}</p>
                     </div>
                   </div>
                   <div className="space-y-1">
+                    <Label className="text-muted-foreground">资金来源</Label>
+                    <p className="font-medium">{FUND_SOURCE_ITEMS.find(i => i.code === project.fundSource)?.name || project.fundSource || '-'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground">承接公司</Label>
+                    <p className="font-medium">{project.contractingCompanyName || '-'}</p>
+                  </div>
+                  <div className="space-y-1">
                     <Label className="text-muted-foreground">中标金额</Label>
                     <div className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <Banknote className="h-4 w-4 text-muted-foreground" />
                       <p className={`font-medium ${project.actualAmount ? 'text-green-600' : ''}`}>
                         {formatCurrency(project.actualAmount)}
                       </p>

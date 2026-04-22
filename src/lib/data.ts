@@ -1,15 +1,43 @@
 import {
   Customer,
-  Project,
   Staff,
   Performance,
   Solution,
   SystemSetting,
   UserRole,
-  ProjectStage,
   SolutionStatus,
   DashboardStats,
 } from '@/types';
+
+// Legacy mock-only types (not used by production code)
+enum ProjectStage {
+  LEAD = 'lead',
+  QUALIFIED = 'qualified',
+  PROPOSAL = 'proposal',
+  DEMO = 'demo',
+  NEGOTIATION = 'negotiation',
+  WON = 'won',
+  LOST = 'lost',
+  ON_HOLD = 'on_hold',
+}
+
+interface Project {
+  id: string;
+  customerId: string;
+  name: string;
+  description?: string;
+  stage: ProjectStage;
+  probability: number;
+  expectedValue: number;
+  actualValue: number;
+  startDate: Date;
+  expectedCloseDate: Date;
+  assignedTo: string;
+  solutionEngineer?: string;
+  createdAt: Date;
+  createdBy: string;
+  updatedAt: Date;
+}
 
 // 模拟客户数据
 export const mockCustomers: Customer[] = [

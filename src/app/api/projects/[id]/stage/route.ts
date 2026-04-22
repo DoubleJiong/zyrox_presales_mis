@@ -12,6 +12,7 @@ import { validateStageTransition } from '@/lib/utils/stage-transitions';
 import { getStageLabel } from '@/lib/utils/project-colors';
 import { transitionProjectStage, ProjectStageTransitionError } from '@/modules/project/project-stage-service';
 import { isGovernedProjectStage } from '@/modules/project/project-stage-policy';
+import { isSystemAdmin } from '@/lib/permissions/project';
 
 // POST - 变更项目阶段
 export const POST = withAuth(async (
@@ -41,8 +42,11 @@ export const POST = withAuth(async (
     const currentStage = (project.projectStage || 'opportunity') as ProjectStage;
     const currentStatus = project.status as ProjectStatus;
 
+    // 检查操作者是否是系统管理员
+    const adminBypass = await isSystemAdmin(context.userId);
+
     // 验证阶段变更
-    const validation = validateStageTransition(currentStage, newStage, currentStatus);
+    const validation = validateStageTransition(currentStage, newStage, currentStatus, { isSystemAdmin: adminBypass });
 
     if (!validation.valid) {
       return NextResponse.json({
@@ -73,6 +77,7 @@ export const POST = withAuth(async (
           toStage: newStage,
           operatorId: context.userId,
           triggerType: 'manual',
+          skipPolicyCheck: adminBypass,
           reason: `手工切换项目阶段到 ${getStageLabel(newStage)}`,
         });
       } catch (serviceError) {

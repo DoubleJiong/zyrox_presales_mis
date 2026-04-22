@@ -1,7 +1,7 @@
 // @ts-nocheck
 /**
- * 数据库初始化脚本（优化版）
- * 用于填充基础数据和测试数据，支持真实数据库部署
+ * 数据库初始化脚本。
+ * 默认仅初始化系统基础数据；只有显式打开开关时才注入业务示例数据。
  */
 
 import bcrypt from 'bcrypt';
@@ -34,6 +34,18 @@ import {
 
 function dateOnly(value: string | null): string | null {
   return value;
+}
+
+export interface SeedDatabaseOptions {
+  includeBusinessData?: boolean;
+}
+
+export function resolveIncludeBusinessData(rawValue = process.env.SEED_INCLUDE_BUSINESS_DATA): boolean {
+  if (!rawValue) {
+    return false;
+  }
+
+  return ['1', 'true', 'yes', 'on'].includes(rawValue.trim().toLowerCase());
 }
 
 async function getSeedPasswordContext() {
@@ -256,14 +268,14 @@ async function seedCustomerTypes() {
   console.log('📝 插入客户类型数据...');
   try {
     const customerTypesData = [
-      { id: 1, name: '高校', code: 'UNIVERSITY', description: '普通高校、本科院校及高等院校客户', status: 'active', createdAt: new Date(), updatedAt: new Date() },
-      { id: 2, name: '政府', code: 'GOVERNMENT', description: '政府机关和事业单位客户', status: 'active', createdAt: new Date(), updatedAt: new Date() },
-      { id: 3, name: '企业', code: 'ENTERPRISE', description: '企业和商业机构客户', status: 'active', createdAt: new Date(), updatedAt: new Date() },
-      { id: 4, name: '医院', code: 'HOSPITAL', description: '医院及医疗卫生机构客户', status: 'active', createdAt: new Date(), updatedAt: new Date() },
-      { id: 5, name: 'K12', code: 'K12', description: '中小学、幼儿园及基础教育客户', status: 'active', createdAt: new Date(), updatedAt: new Date() },
-      { id: 6, name: '高职', code: 'HIGHER_VOCATIONAL', description: '高职高专、职业学院及职业大学客户', status: 'active', createdAt: new Date(), updatedAt: new Date() },
-      { id: 7, name: '中专', code: 'SECONDARY_VOCATIONAL', description: '中专、中职及中等职业学校客户', status: 'active', createdAt: new Date(), updatedAt: new Date() },
-      { id: 8, name: '军警', code: 'MILITARY_POLICE', description: '军队、武警、公安及警务院校客户', status: 'active', createdAt: new Date(), updatedAt: new Date() },
+      { id: 1, name: '高校', code: 'UNIVERSITY', description: '普通高校、本科院校及高等院校客户', sortOrder: 1, status: 'active', createdAt: new Date(), updatedAt: new Date() },
+      { id: 2, name: '政府', code: 'GOVERNMENT', description: '政府机关和事业单位客户', sortOrder: 5, status: 'active', createdAt: new Date(), updatedAt: new Date() },
+      { id: 3, name: '企业', code: 'ENTERPRISE', description: '企业和商业机构客户', sortOrder: 4, status: 'active', createdAt: new Date(), updatedAt: new Date() },
+      { id: 4, name: '医院', code: 'HOSPITAL', description: '医院及医疗卫生机构客户', sortOrder: 8, status: 'active', createdAt: new Date(), updatedAt: new Date() },
+      { id: 5, name: 'K12', code: 'K12', description: '中小学、幼儿园及基础教育客户', sortOrder: 2, status: 'active', createdAt: new Date(), updatedAt: new Date() },
+      { id: 6, name: '其他事业单位', code: 'HIGHER_VOCATIONAL', description: '高职高专、职业学院及其他事业单位客户', sortOrder: 6, status: 'active', createdAt: new Date(), updatedAt: new Date() },
+      { id: 7, name: '中职', code: 'SECONDARY_VOCATIONAL', description: '中职、中专及中等职业学校客户', sortOrder: 3, status: 'active', createdAt: new Date(), updatedAt: new Date() },
+      { id: 8, name: '军警', code: 'MILITARY_POLICE', description: '军队、武警、公安及警务院校客户', sortOrder: 7, status: 'active', createdAt: new Date(), updatedAt: new Date() },
     ];
 
     for (const customerType of customerTypesData) {
@@ -554,7 +566,7 @@ async function seedSolutions() {
 }
 
 // ============================================
-// 2. 业务数据插入
+// 2. 业务示例数据插入（默认关闭）
 // ============================================
 
 /**
@@ -870,30 +882,45 @@ async function seedPerformanceRecords() {
 // 主函数
 // ============================================
 
-export async function seedDatabase() {
+export async function seedSystemBaseData() {
+  await seedRoles();
+  await seedUsers();
+  await seedPresalesServiceTypes();
+  await seedAlertRules();
+  await seedCustomerTypes();
+  // seedProjectTypes() — 已废弃，项目类型统一至字典 project_type
+  await seedSolutionTypes();
+  await seedSubsidiaries();
+  await seedAttributes();
+}
+
+export async function seedBusinessDemoData() {
+  await seedSolutions();
+  await seedCustomers();
+  await seedProjects();
+  await seedTasks();
+  await seedProjectPresalesRecords();
+  await seedAlertHistories();
+  await seedPerformances();
+  await seedPerformanceRecords();
+}
+
+export async function seedDatabase(options: SeedDatabaseOptions = {}) {
   console.log('🚀 开始数据库初始化...\n');
 
-  try {
-    // 1. 插入基础数据
-    await seedRoles();
-    await seedUsers();
-    await seedPresalesServiceTypes();
-    await seedAlertRules();
-    await seedCustomerTypes();
-    await seedProjectTypes();
-    await seedSolutionTypes();
-    await seedSubsidiaries();
-    await seedAttributes();
-    await seedSolutions();
+  const includeBusinessData = options.includeBusinessData ?? resolveIncludeBusinessData();
 
-    // 2. 插入业务数据
-    await seedCustomers();
-    await seedProjects();
-    await seedTasks();
-    await seedProjectPresalesRecords();
-    await seedAlertHistories();
-    await seedPerformances();
-    await seedPerformanceRecords();
+  try {
+    // 1. 插入系统基础数据
+    await seedSystemBaseData();
+
+    // 2. 仅在显式开启时插入业务示例数据
+    if (includeBusinessData) {
+      console.log('ℹ️ 检测到 SEED_INCLUDE_BUSINESS_DATA=true，开始写入业务示例数据...');
+      await seedBusinessDemoData();
+    } else {
+      console.log('ℹ️ 已跳过业务示例数据初始化；当前环境仅写入系统基础数据。');
+    }
 
     console.log('\n✅ 数据库初始化完成！');
   } catch (error) {

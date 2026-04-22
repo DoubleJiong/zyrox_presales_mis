@@ -236,12 +236,14 @@ export default function ContractsPage() {
         const errorMsg = typeof result.error === 'object' && result.error !== null
           ? (result.error.message || JSON.stringify(result.error))
           : (result.error || '删除失败');
-        throw new Error(errorMsg);
+        const errorCode = typeof result.error === 'object' && result.error !== null ? result.error.code : undefined;
+        throw Object.assign(new Error(errorMsg), { forbiddenCode: errorCode });
       }
     } catch (error) {
+      const isForbidden = (error as any)?.forbiddenCode === 'FORBIDDEN';
       toast({
         variant: 'destructive',
-        title: '删除失败',
+        title: isForbidden ? '没有访问权限' : '删除失败',
         description: error instanceof Error ? error.message : '请稍后重试',
       });
     } finally {

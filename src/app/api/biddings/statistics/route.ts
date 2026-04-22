@@ -68,6 +68,7 @@ export const GET = withAuth(async (
         createdAt: projects.createdAt,
         // 投标详情
         biddingId: projectBiddings.id,
+        biddingMethod: projectBiddings.biddingMethod,
         biddingType: projectBiddings.biddingType,
         bidPrice: projectBiddings.bidPrice,
         bidResultDetail: projectBiddings.bidResult,
@@ -106,7 +107,7 @@ export const GET = withAuth(async (
 
     // 按投标类型统计
     const biddingTypeStats = biddingProjects.reduce((acc, p) => {
-      const type = p.biddingType || 'unknown';
+      const type = p.biddingMethod ?? p.biddingType ?? 'unknown';
       if (!acc[type]) {
         acc[type] = { total: 0, won: 0, lost: 0 };
       }

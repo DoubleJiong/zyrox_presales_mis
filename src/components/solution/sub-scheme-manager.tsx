@@ -280,11 +280,8 @@ export function SubSchemeManager({ solutionId, permissions }: SubSchemeManagerPr
         }),
       });
 
-      if (file.fileUrl) {
-        window.open(file.fileUrl, '_blank');
-      } else {
-        toast({ title: '文件链接不可用', variant: 'destructive' });
-      }
+      // 使用下载代理端点，避免预签名URL过期问题
+      window.open(`/api/solutions/${solutionId}/sub-schemes/${file.subSchemeId}/files/${file.id}`, '_blank');
     } catch (error) {
       console.error('Failed to download:', error);
       toast({ title: '下载失败', variant: 'destructive' });

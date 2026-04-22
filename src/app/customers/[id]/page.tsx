@@ -16,7 +16,7 @@ import {
   Sparkles,
   Calendar,
   Building2,
-  DollarSign,
+  Banknote,
   FileIcon,
   ChevronDown,
   ChevronRight,
@@ -264,9 +264,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   // 当客户数据或项目数据变化时，更新状态评价
   useEffect(() => {
     if (customer) {
-      const statusText = customer.status === 'active' ? '活跃' : 
-                        customer.status === 'potential' ? '潜在' : 
-                        customer.status === 'inactive' ? '非活跃' : '已流失';
+      const statusMap: Record<string, string> = {
+        active: '活跃', potential: '潜在', inactive: '非活跃', lost: '已流失', converted: '成交',
+      };
+      const statusText = statusMap[customer.status] || customer.status;
       // 使用 projectsTotal（总项目数）而不是 currentProjectCount（进行中项目数）
       const projectCountText = projectsTotal > 0 ? `${projectsTotal} 个项目` : '暂无项目';
       setStatusEvaluation(`${statusText}客户，${projectCountText}`);
@@ -803,7 +804,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                             <div className="text-xs text-muted-foreground mt-1">{project.projectCode}</div>
                             <div className="flex items-center gap-2 mt-2">
                               <Badge variant="outline" className="text-xs">
-                                <DollarSign className="h-3 w-3 mr-1" />
+                                <Banknote className="h-3 w-3 mr-1" />
                                 {formatCurrency(project.estimatedAmount)}
                               </Badge>
                               <Badge variant="outline" className="text-xs">

@@ -1,5 +1,5 @@
 import { db } from '@/db';
-import { solutionTeams, solutions } from '@/db/schema';
+import { solutionTeams, solutions, users, roles } from '@/db/schema';
 import { eq, and, or, isNull } from 'drizzle-orm';
 
 export type SolutionPermission = 
@@ -15,6 +15,30 @@ export interface UserSolutionPermission {
   role: string | null;
   permissions: Record<SolutionPermission, boolean>;
   isOwner: boolean;
+  isAdmin?: boolean;
+}
+
+/** 判断用户是否为系统管理员（role: admin / isSuperAdmin） */
+async function checkIsAdmin(userId: number): Promise<boolean> {
+  const [user] = await db
+    .select({ roleId: users.roleId })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user?.roleId) return false;
+
+  const [role] = await db
+    .select({ roleCode: roles.roleCode, permissions: roles.permissions })
+    .from(roles)
+    .where(eq(roles.id, user.roleId))
+    .limit(1);
+
+  if (!role) return false;
+  const code = (role.roleCode || '').toUpperCase();
+  if (code === 'ADMIN' || code === 'SUPER_ADMIN') return true;
+  const perms = (role.permissions || []) as string[];
+  return perms.includes('*');
 }
 
 /**
@@ -27,6 +51,25 @@ export async function getUserSolutionPermission(
   userId: number,
   solutionId: number
 ): Promise<UserSolutionPermission> {
+  // 检查是否为系统管理员
+  const isAdmin = await checkIsAdmin(userId);
+  if (isAdmin) {
+    return {
+      isTeamMember: true,
+      role: 'owner',
+      permissions: {
+        canEdit: true,
+        canDelete: true,
+        canApprove: true,
+        canInvite: true,
+        canUpload: true,
+        canDownload: true,
+      },
+      isOwner: true,
+      isAdmin: true,
+    };
+  }
+
   // 获取方案信息
   const [solution] = await db
     .select({

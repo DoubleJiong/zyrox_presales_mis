@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import dotenv from 'dotenv';
 import * as XLSX from 'xlsx';
-import { isNull, sql } from 'drizzle-orm';
+import { isNull, sql, eq, and } from 'drizzle-orm';
 import {
   normalizeLedgerProject,
   normalizeLedgerText,
@@ -22,7 +22,7 @@ interface ScriptOptions {
 interface ReferenceData {
   operatorId: number;
   customerTypeByName: Map<string, { id: number; code: string; name: string }>;
-  projectTypeByName: Map<string, { id: number; code: string; name: string }>;
+  projectTypeByName: Map<string, { code: string; name: string }>;
   userByName: Map<string, { id: number; realName: string }>;
   existingCustomerByName: Map<string, { id: number; customerName: string }>;
   existingProjectNames: Set<string>;
@@ -164,15 +164,20 @@ function readLedgerRows(filePath: string, sheetName: string): LedgerRow[] {
 
 async function loadReferenceData(): Promise<ReferenceData> {
   const { db, schema } = await getDbDependencies();
-  const { customerTypes, projectTypes, users, customers, projects } = schema;
+  const { customerTypes, users, customers, projects, attributes } = schema;
 
   const [customerTypeList, projectTypeList, userList, customerList, projectList] = await Promise.all([
     db.select({ id: customerTypes.id, code: customerTypes.code, name: customerTypes.name })
       .from(customerTypes)
       .where(isNull(customerTypes.deletedAt)),
-    db.select({ id: projectTypes.id, code: projectTypes.code, name: projectTypes.name })
-      .from(projectTypes)
-      .where(isNull(projectTypes.deletedAt)),
+    // 项目类型从字典获取
+    db.select({ code: attributes.value, name: attributes.name })
+      .from(attributes)
+      .where(and(
+        eq(attributes.category, 'project_type'),
+        eq(attributes.status, 'active'),
+        isNull(attributes.deletedAt),
+      )),
     db.select({ id: users.id, realName: users.realName })
       .from(users)
       .where(isNull(users.deletedAt)),
@@ -236,9 +241,11 @@ async function loadReferenceData(): Promise<ReferenceData> {
       return entries.map(([key, value]) => [key.toLowerCase(), value]);
     })),
     projectTypeByName: new Map(projectTypeList.flatMap((item) => {
-      const entries: Array<[string, { id: number; code: string; name: string }]> = [
-        [item.name.toLowerCase(), item],
-        [item.code.toLowerCase(), item],
+      const code = item.code || '';
+      const name = item.name || code;
+      const entries: Array<[string, { code: string; name: string }]> = [
+        [name.toLowerCase(), { code, name }],
+        [code.toLowerCase(), { code, name }],
       ];
       return entries;
     })),
@@ -269,15 +276,15 @@ function resolveCustomerTypeId(referenceData: ReferenceData, customerTypeRaw: st
     ?? null;
 }
 
-function resolveProjectType(referenceData: ReferenceData, preferredLabels: string[]): { id: number | null; code: string | null } {
+function resolveProjectType(referenceData: ReferenceData, preferredLabels: string[]): { code: string | null } {
   for (const label of preferredLabels) {
     const matched = referenceData.projectTypeByName.get(label.toLowerCase());
     if (matched) {
-      return { id: matched.id, code: matched.code };
+      return { code: matched.code };
     }
   }
 
-  return { id: null, code: null };
+  return { code: null };
 }
 
 async function ensureCustomer(
@@ -384,7 +391,7 @@ async function runImport(options: ScriptOptions) {
         projectName: normalized.projectName,
         customerId,
         customerName: normalized.customerName,
-        projectTypeId: projectType.id,
+        projectTypeId: null, // deprecated
         projectType: projectType.code,
         projectStage: normalized.projectStage,
         status: normalized.status,

@@ -10,7 +10,6 @@ import {
   Database, 
   FileText, 
   Building2, 
-  FolderKanban, 
   ShieldCheck, 
   MapPin, 
   FileSpreadsheet, 
@@ -45,20 +44,11 @@ export default function SettingsPage() {
     {
       id: 'dictionary',
       title: '数据字典',
-      description: '统一管理业务字典：行业、区域、优先级、投标方式等下拉选项',
+      description: '统一管理业务字典：行业、区域、优先级、投标方式、项目类型等下拉选项',
       icon: BookOpen,
       href: '/settings/dictionary',
       badge: '核心',
       badgeVariant: 'default',
-    },
-    {
-      id: 'project-types',
-      title: '项目类型',
-      description: '维护项目类型主数据真源，并同步项目与客户默认类型编码',
-      icon: FolderKanban,
-      href: '/settings/project-types',
-      badge: '主数据',
-      badgeVariant: 'secondary',
     },
   ];
 

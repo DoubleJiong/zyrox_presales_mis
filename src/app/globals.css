@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import '../../node_modules/tw-animate-css/dist/tw-animate.css';
 @import '../styles/sci-fi.css';
+@import '../styles/data-screen-tokens.css';
 
 @source "../**/*.{js,jsx,ts,tsx,mdx}";
 

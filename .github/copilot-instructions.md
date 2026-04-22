@@ -10,7 +10,7 @@ When the task is about 团队执行驾驶舱、团队协同驾驶舱、管理工
 
 Then continue under the existing governance skills it references.
 
-When the task is about 数据大屏二期、领导驾驶舱升级、区域视角、人员视角、专题视角、浙江地图修复、data-screen phase 2、统一大屏入口、heatmap 修复、按任务卡开始做数据大屏, first load:
+When the task is about 数据大屏改造、大屏主屏+分屏、1+4大屏重构、区域洞察、团队管理分屏、项目管理分屏、客户洞察、Phase 0-6、数据大屏二期、领导驾驶舱升级、区域视角、人员视角、专题视角、浙江地图修复、data-screen phase 2、统一大屏入口、heatmap 修复、按任务卡开始做数据大屏, first load:
 
 - `.github/skills/presales-data-screen-cockpit-upgrade/SKILL.md`
 
@@ -33,6 +33,16 @@ When the task starts from module-by-module manual review, acceptance walkthrough
 Then continue implementation under:
 
 - `.github/skills/presales-governance-execution/SKILL.md`
+
+When the task is a **tight one-issue-at-a-time bug-fix or requirement session** where the user describes one bug or requirement per turn and expects full closure before the next—ensuring bounded changes, adjacent-issue detection, complete regression testing, and zero new-bug introduction—first load:
+
+- `.github/skills/presales-bugfix-response/SKILL.md`
+
+Then continue under:
+
+- `.github/skills/presales-governance-execution/SKILL.md`
+
+Trigger phrases: 修一个、处理一个、下面描述一个你修一个、逐条修复、一个一个来、这个bug、这个需求、帮我改这个.
 
 ## Execution Priority
 

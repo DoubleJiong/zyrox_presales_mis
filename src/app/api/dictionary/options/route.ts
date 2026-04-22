@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { attributes, projectTypes } from '@/db/schema';
+import { attributes } from '@/db/schema';
 import { isNull, inArray, asc, and } from 'drizzle-orm';
 import { ALL_DICT_ITEMS } from '@/lib/config/dictionary-config';
 
@@ -11,11 +11,6 @@ const CATEGORY_ALIAS: Record<string, string> = {
   // 项目相关
   'priority': 'project_priority',
 };
-
-/**
- * 需要从独立表获取数据的分类（已迁移到 sys_attribute 表）
- */
-const EXTERNAL_TABLE_CATEGORIES: string[] = ['project_type'];
 
 function getFallbackOptions(category: string) {
   const config = ALL_DICT_ITEMS.find((item) => item.category === category);
@@ -72,49 +67,23 @@ export async function GET(request: NextRequest) {
 
     // 获取实际的数据库分类名列表
     const dictCategories = requestedCategories.map(c => CATEGORY_ALIAS[c] || c);
-    const attributeCategories = dictCategories.filter(category => !EXTERNAL_TABLE_CATEGORIES.includes(category));
 
     // 从字典表获取数据
-    const items = attributeCategories.length > 0
+    const items = dictCategories.length > 0
       ? await db
           .select()
           .from(attributes)
           .where(and(
-            inArray(attributes.category, attributeCategories),
+            inArray(attributes.category, dictCategories),
             isNull(attributes.deletedAt)
           ))
           .orderBy(asc(attributes.sortOrder))
-      : [];
-
-    const externalProjectTypes = requestedCategories.includes('project_type')
-      ? await db
-          .select({
-            id: projectTypes.id,
-            code: projectTypes.code,
-            name: projectTypes.name,
-            status: projectTypes.status,
-          })
-          .from(projectTypes)
-          .where(isNull(projectTypes.deletedAt))
-          .orderBy(asc(projectTypes.id))
       : [];
 
     // 按原始请求的分类名分组返回
     for (const requestedCategory of requestedCategories) {
       // 获取实际的数据库分类名
       const actualCategory = CATEGORY_ALIAS[requestedCategory] || requestedCategory;
-
-      if (actualCategory === 'project_type') {
-        result[requestedCategory] = externalProjectTypes
-          .filter(item => includeInactive || item.status === 'active')
-          .map((item, index) => ({
-            value: item.code,
-            label: item.name,
-            sort: index + 1,
-          }));
-
-        continue;
-      }
       
       const categoryItems = items
         .filter(item => {
@@ -125,14 +94,16 @@ export async function GET(request: NextRequest) {
         .map(item => {
           let code = item.value;
             if (!code) {
-              const keyParts = item.code.split('_');
-              const categoryPrefix = actualCategory.replace(/_/g, '_');
-              if (item.code.startsWith(categoryPrefix + '_')) {
-                code = item.code.substring(categoryPrefix.length + 1);
-              } else if (keyParts.length > 2) {
-                code = keyParts.slice(2).join('_');
+              // attribute_key 格式可能是 "category.value"（点号分隔）或 "category_value"（下划线分隔）
+              if (item.code.includes('.')) {
+                // 格式：customer_status.potential → 取点号后面的部分
+                code = item.code.substring(item.code.indexOf('.') + 1);
+              } else if (item.code.startsWith(actualCategory + '_')) {
+                // 格式：customer_status_potential → 去掉分类前缀
+                code = item.code.substring(actualCategory.length + 1);
               } else {
-                code = keyParts[keyParts.length - 1];
+                const keyParts = item.code.split('_');
+                code = keyParts.length > 2 ? keyParts.slice(2).join('_') : keyParts[keyParts.length - 1];
               }
             }
             return {

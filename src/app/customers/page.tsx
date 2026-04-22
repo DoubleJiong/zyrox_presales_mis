@@ -68,7 +68,7 @@ import {
   FileText,
   History,
   TrendingUp,
-  DollarSign,
+  Banknote,
   AlertCircle,
   Upload,
   FileUp,
@@ -77,6 +77,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { matchCustomerName } from '@/lib/customer-name-dedup';
+import { resolveApiErrorToast } from '@/lib/api-toast';
 
 interface Customer {
   id: number;
@@ -184,7 +185,7 @@ export default function CustomersPage() {
   const [sortDirection, setSortDirection] = useState<CustomerSortDirection>('desc');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const itemsPerPage = 9;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   // 新建客户相关
   const [addCustomerDialogOpen, setAddCustomerDialogOpen] = useState(false);
@@ -249,7 +250,7 @@ export default function CustomersPage() {
     if (customerTypeList.length > 0 || typeFilter === 'all') {
       fetchCustomers();
     }
-  }, [currentPage, statusFilter, typeFilter, sortField, sortDirection, customerTypeList.length]);
+  }, [currentPage, statusFilter, typeFilter, sortField, sortDirection, customerTypeList.length, itemsPerPage]);
 
   // 搜索防抖
   useEffect(() => {
@@ -514,7 +515,13 @@ export default function CustomersPage() {
       return;
     }
 
-    const createCheck = await runCreateNameCheck(newCustomer.customerName);
+    let createCheck: Awaited<ReturnType<typeof runCreateNameCheck>>;
+    try {
+      createCheck = await runCreateNameCheck(newCustomer.customerName);
+    } catch {
+      // 相似客户检查失败时跳过并继续提交，不阻断主流程
+      createCheck = { status: 'idle', matches: [] };
+    }
     if (createCheck.status === 'exists') {
       setDuplicateError('客户名称已存在，请确认是否重复');
       setCreateNameCheckStatus('exists');
@@ -603,20 +610,13 @@ export default function CustomersPage() {
           description: '客户创建成功！',
         });
       } else {
-        const error = await response.json();
-        toast({
-          variant: 'destructive',
-          title: '创建失败',
-          description: `创建失败：${error.message || '未知错误'}`,
-        });
+        const result = await response.json();
+        const { title, description } = resolveApiErrorToast(result.error, '创建失败');
+        toast({ variant: 'destructive', title, description });
       }
     } catch (error) {
       console.error('Failed to create customer:', error);
-      toast({
-        variant: 'destructive',
-        title: '操作失败',
-        description: '创建失败，请稍后重试',
-      });
+      toast({ variant: 'destructive', title: '操作失败', description: '创建失败，请稍后重试' });
     } finally {
       setSubmittingCustomer(false);
     }
@@ -770,7 +770,12 @@ export default function CustomersPage() {
       return;
     }
 
-    const editCheck = await runEditNameCheck(editCustomer.customerName);
+    let editCheck: Awaited<ReturnType<typeof runEditNameCheck>>;
+    try {
+      editCheck = await runEditNameCheck(editCustomer.customerName);
+    } catch {
+      editCheck = { status: 'idle', matches: [] };
+    }
     if (editCheck.status === 'exists') {
       toast({
         variant: 'destructive',
@@ -850,22 +855,12 @@ export default function CustomersPage() {
         });
       } else {
         // 正确提取错误消息 - result.error 是对象 {code, message}
-        const errorMsg = typeof result.error === 'object' && result.error !== null
-          ? (result.error.message || JSON.stringify(result.error))
-          : (result.error || '更新失败');
-        toast({
-          variant: 'destructive',
-          title: '更新失败',
-          description: errorMsg,
-        });
+        const { title, description } = resolveApiErrorToast(result.error, '更新失败');
+        toast({ variant: 'destructive', title, description });
       }
     } catch (error) {
       console.error('Failed to update customer:', error);
-      toast({
-        variant: 'destructive',
-        title: '操作失败',
-        description: '更新失败，请稍后重试',
-      });
+      toast({ variant: 'destructive', title: '操作失败', description: '更新失败，请稍后重试' });
     } finally {
       setSubmittingCustomer(false);
     }
@@ -880,8 +875,9 @@ export default function CustomersPage() {
       potential: { label: '潜在', variant: 'secondary' },
       inactive: { label: '非活跃', variant: 'outline' },
       lost: { label: '已流失', variant: 'destructive' },
+      converted: { label: '成交', variant: 'default' },
     };
-    const statusInfo = statusMap[status] || { label: status, variant: 'default' as const };
+    const statusInfo = statusMap[status] || { label: '-', variant: 'outline' as const };
     return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>;
   };
 
@@ -1708,8 +1704,9 @@ export default function CustomersPage() {
           ) : (
             <>
               {viewMode === 'table' ? (
+                <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] rounded-md border">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 z-20 bg-background">
                     <TableRow>
                       <TableHead>客户名称</TableHead>
                       <TableHead>客户编号</TableHead>
@@ -1788,6 +1785,7 @@ export default function CustomersPage() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {paginatedCustomers.map((customer) => (
@@ -1870,62 +1868,79 @@ export default function CustomersPage() {
               )}
 
               {/* 分页 */}
-              {totalPages > 1 && (
-                <nav aria-label="pagination" data-testid="pagination" className="flex items-center justify-between mt-6 pt-4 border-t">
-                  <div className="text-sm text-muted-foreground">
-                    显示 {startIndex + 1} - {endIndex} 条，共 {totalCount} 条
+              <nav aria-label="pagination" data-testid="pagination" className="flex items-center justify-between mt-6 pt-4 border-t">
+                <div className="text-sm text-muted-foreground">
+                  显示 {startIndex + 1} - {endIndex} 条，共 {totalCount} 条
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    每页
+                    <Select value={String(itemsPerPage)} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
+                      <SelectTrigger className="h-8 w-[70px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    条
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-3"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4 mr-1" />
-                      上一页
-                    </Button>
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                        if (
-                          page === 1 ||
-                          page === totalPages ||
-                          (page >= currentPage - 1 && page <= currentPage + 1)
-                        ) {
-                          return (
-                            <Button
-                              key={page}
-                              variant={currentPage === page ? 'default' : 'outline'}
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              onClick={() => setCurrentPage(page)}
-                            >
-                              {page}
-                            </Button>
-                          );
-                        } else if (
-                          page === currentPage - 2 ||
-                          page === currentPage + 2
-                        ) {
-                          return <span key={page} className="text-muted-foreground">...</span>;
-                        }
-                        return null;
-                      })}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-3"
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      下一页
-                      <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  </div>
-                </nav>
-              )}
+                  {totalPages > 1 && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-3"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        上一页
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                          if (
+                            page === 1 ||
+                            page === totalPages ||
+                            (page >= currentPage - 1 && page <= currentPage + 1)
+                          ) {
+                            return (
+                              <Button
+                                key={page}
+                                variant={currentPage === page ? 'default' : 'outline'}
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => setCurrentPage(page)}
+                              >
+                                {page}
+                              </Button>
+                            );
+                          } else if (
+                            page === currentPage - 2 ||
+                            page === currentPage + 2
+                          ) {
+                            return <span key={page} className="text-muted-foreground">...</span>;
+                          }
+                          return null;
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-3"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        下一页
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </nav>
             </>
           )}
         </CardContent>
@@ -2009,7 +2024,7 @@ export default function CustomersPage() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-base flex items-center gap-2">
-                        <DollarSign className="h-4 w-4" />
+                        <Banknote className="h-4 w-4" />
                         交易数据
                       </CardTitle>
                     </CardHeader>

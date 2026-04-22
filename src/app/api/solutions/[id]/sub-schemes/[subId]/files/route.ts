@@ -138,6 +138,7 @@ export async function POST(
     });
     
     const fileUrl = uploadResult.url;
+    const storageKey = uploadResult.key;
 
     // 保存文件记录
     const [newFile] = await db
@@ -148,6 +149,7 @@ export async function POST(
         fileType,
         fileSize: file.size,
         fileUrl: fileUrl,
+        storageKey: storageKey,
         version: newVersion,
         isCurrent: true,
         uploadedBy: user.id,

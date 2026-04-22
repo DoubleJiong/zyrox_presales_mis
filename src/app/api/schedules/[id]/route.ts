@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { schedules } from '@/db/schema';
+import { messages, schedules, tasks } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import {
@@ -153,6 +153,40 @@ export const PUT = withAuth(async (
         senderId: userId,
         mode: 'updated',
       });
+    }
+
+    // D4: 日程取消时，若关联任务则通知任务负责人
+    if (
+      body.scheduleStatus === 'cancelled' &&
+      existingSchedule.scheduleStatus !== 'cancelled' &&
+      updatedSchedule.relatedType === 'task' &&
+      updatedSchedule.relatedId
+    ) {
+      try {
+        const [relatedTask] = await db
+          .select({ assigneeId: tasks.assigneeId, taskName: tasks.taskName })
+          .from(tasks)
+          .where(eq(tasks.id, updatedSchedule.relatedId));
+
+        if (relatedTask?.assigneeId && relatedTask.assigneeId !== userId) {
+          await db.insert(messages).values({
+            receiverId: relatedTask.assigneeId,
+            senderId: userId,
+            title: '关联日程已取消，请确认任务状态',
+            content: `任务《${relatedTask.taskName}》的关联日程《${updatedSchedule.title}》已取消，请确认是否需要调整任务计划。`,
+            type: 'reminder',
+            priority: 'normal',
+            relatedType: 'task',
+            relatedId: updatedSchedule.relatedId,
+            actionUrl: `/tasks/${updatedSchedule.relatedId}`,
+            actionText: '查看任务',
+            isRead: false,
+            isDeleted: false,
+          });
+        }
+      } catch (notifyErr) {
+        console.error('[Schedules] Failed to notify task assignee on schedule cancel:', notifyErr);
+      }
     }
 
     return NextResponse.json({

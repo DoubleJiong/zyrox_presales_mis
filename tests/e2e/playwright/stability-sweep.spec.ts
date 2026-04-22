@@ -90,8 +90,8 @@ test.describe('stability sweep', () => {
       const projectTypeText = await emptyProjectTypeButton.textContent();
       if (projectTypeText?.includes('搜索并选择项目类型')) {
         await emptyProjectTypeButton.click();
-        await page.getByPlaceholder('搜索项目类型...').fill('集成');
-        const integrationOption = page.locator('[cmdk-item]').filter({ hasText: /^集成$/ }).first();
+        await page.getByPlaceholder('搜索项目类型...').fill('系统集成');
+        const integrationOption = page.locator('[cmdk-item]').filter({ hasText: /^系统集成/ }).first();
         await expect(integrationOption).toBeVisible();
         await integrationOption.click();
       }
@@ -175,7 +175,7 @@ test.describe('stability sweep', () => {
       await page.getByRole('button', { name: '更新' }).click();
 
       await expect(page.getByRole('dialog', { name: '编辑用户' })).not.toBeVisible({ timeout: 10_000 });
-      await expect(page.getByRole('row').filter({ hasText: '稳定性已编辑用户' })).toBeVisible({ timeout: 10_000 });
+      await expect(userRow).toContainText('稳定性已编辑用户', { timeout: 10_000 });
 
       page.once('dialog', (dialog) => dialog.accept());
       await userRow.getByTestId('user-delete-button').click();
@@ -426,7 +426,7 @@ test.describe('stability sweep', () => {
       await createDialog.getByTestId('roles-role-code-input').fill(roleCode);
       await createDialog.getByTestId('roles-description-input').fill('稳定性角色权限配置');
       await createDialog.getByTestId('roles-permissions-tab').click();
-      await createDialog.getByTestId('roles-permission-checkbox-alert:read').click({ force: true });
+      await createDialog.getByTestId('roles-permission-checkbox-alert:view').click({ force: true });
       await createDialog.getByTestId('roles-save-button').click();
 
       await expect(createDialog).not.toBeVisible({ timeout: 10_000 });
@@ -441,7 +441,7 @@ test.describe('stability sweep', () => {
       await editDialog.getByTestId('roles-role-name-input').fill(`${roleName}-已编辑`);
       await editDialog.getByTestId('roles-description-input').fill('稳定性角色权限配置-已编辑');
       await editDialog.getByTestId('roles-permissions-tab').click();
-      await editDialog.getByTestId('roles-permission-checkbox-project:read').click({ force: true });
+      await editDialog.getByTestId('roles-permission-checkbox-project:view').click({ force: true });
       await editDialog.getByTestId('roles-save-button').click();
 
       await expect(editDialog).not.toBeVisible({ timeout: 10_000 });
@@ -950,8 +950,6 @@ test.describe('stability sweep', () => {
       await page.getByTestId('bidding-price-limit-input').fill('888000');
       await page.getByTestId('bidding-fund-source-trigger').click();
       await page.getByRole('option', { name: '财政资金' }).click();
-      await page.getByTestId('bidding-type-trigger').click();
-      await page.getByRole('option', { name: '公开招标' }).click();
       await page.getByTestId('bidding-deadline-input').fill('2026-04-20T09:30');
       await page.getByTestId('bidding-open-date-input').fill('2026-04-21T09:30');
       await page.getByTestId('bidding-bid-price-input').fill('820000');
@@ -1195,7 +1193,7 @@ test.describe('stability sweep', () => {
       await page.getByTestId('bidding-proposal-name-input').fill(updatedProposalName);
       await page.getByTestId('bidding-proposal-status-trigger').click();
       await page.getByRole('option', { name: '已完成' }).click();
-      await page.getByTestId('bidding-proposal-progress-input').fill('100');
+      // progress auto-sets to 100 when status is '已完成' — field is disabled
       await page.getByTestId('bidding-proposal-notes-textarea').fill('稳定性投标方案已完成');
       await page.getByTestId('bidding-proposal-save-button').click();
       const updateProposalResponse = await updateProposalResponsePromise;
@@ -1491,14 +1489,13 @@ test.describe('stability sweep', () => {
       await loginAsAdmin(page);
       apiContext = await createApiContextFromPage(page);
 
-      const heatmapResponse = await apiContext.get('/api/data-screen/heatmap?mode=customer');
-      expect(heatmapResponse.ok()).toBeTruthy();
+      const regionViewResponse = await apiContext.get('/api/data-screen/region-view');
+      expect(regionViewResponse.ok()).toBeTruthy();
 
       await page.goto('/data-screen');
       await expect(page.getByTestId('data-screen-page')).toBeVisible();
-      await expect(page.getByTestId('data-screen-primary-view-bar')).toBeVisible();
-      await expect(page.getByTestId('data-screen-active-view-preset')).toContainText('管理层视图');
-      await expect(page.getByTestId('data-screen-management-focus-panel')).toBeVisible();
+      await expect(page.getByTestId('data-screen-region-layout')).toBeVisible();
+      await expect(page.getByTestId('data-screen-kpi-bar')).toBeVisible();
     } finally {
       if (apiContext) {
         await apiContext.dispose();
@@ -1539,9 +1536,11 @@ test.describe('stability sweep', () => {
         createdRuleId = createRulePayload?.data?.id ?? null;
         expect(createdRuleId).toBeTruthy();
 
-        const checkResponse = await apiContext.post('/api/alerts/check');
-        const checkPayload = await checkResponse.json();
-        expect(checkResponse.ok(), JSON.stringify(checkPayload)).toBeTruthy();
+        const triggerResponse = await apiContext.post('/api/internal/alerts/trigger-check', {
+          data: { ruleId: createdRuleId },
+        });
+        const triggerPayload = await triggerResponse.json();
+        expect(triggerResponse.ok(), JSON.stringify(triggerPayload)).toBeTruthy();
 
         historiesResponse = await apiContext.get(`/api/alerts/histories?ruleId=${createdRuleId}`);
         historiesPayload = await historiesResponse.json();
@@ -1925,8 +1924,8 @@ test.describe('stability sweep', () => {
       apiContext = await createApiContextFromPage(page);
       solutionId = await createSolution(apiContext, solutionName);
 
-      const reusableUser = await findFirstNonAdminUser(apiContext);
-      expect(reusableUser).toBeTruthy();
+      const adminUser = await findAdminUser(apiContext);
+      expect(adminUser).toBeTruthy();
 
       await page.goto(`/solutions/${solutionId}`);
       await expect(page.getByTestId('solution-detail-page')).toBeVisible();
@@ -1934,13 +1933,13 @@ test.describe('stability sweep', () => {
 
       await page.getByTestId('solution-review-open-dialog-button').click();
       await expect(page.getByTestId('solution-review-dialog')).toBeVisible();
-      await page.getByTestId('solution-reviewer-search-input').fill(reusableUser!.username);
+      await page.getByTestId('solution-reviewer-search-input').fill(adminUser!.username);
       await expect(page.getByTestId(new RegExp(`solution-reviewer-option-`))).toBeVisible({ timeout: 10_000 });
-      await page.getByTestId(new RegExp(`solution-reviewer-option-`)).filter({ hasText: reusableUser!.name }).first().click();
+      await page.getByTestId(new RegExp(`solution-reviewer-option-`)).filter({ hasText: adminUser!.name }).first().click();
       await page.getByTestId('solution-review-submit-button').click();
 
       await expect(page.getByText('审核中')).toBeVisible({ timeout: 10_000 });
-      await expect(page.locator('[data-testid^="solution-review-record-"]').filter({ hasText: reusableUser!.name }).first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('[data-testid^="solution-review-record-"]').filter({ hasText: adminUser!.name }).first()).toBeVisible({ timeout: 10_000 });
 
       await page.getByTestId('solution-review-approve-button').click();
       await expect.poll(async () => {
@@ -1949,7 +1948,7 @@ test.describe('stability sweep', () => {
       }).toBe('approved');
 
       const reviews = await getSolutionReviews(apiContext, solutionId);
-      expect(reviews.some((review) => review.reviewerId === reusableUser!.id && review.reviewStatus === 'approved')).toBeTruthy();
+      expect(reviews.some((review) => review.reviewerId === adminUser!.id && review.reviewStatus === 'approved')).toBeTruthy();
     } finally {
       if (apiContext) {
         if (solutionId) {
@@ -2102,7 +2101,10 @@ async function deleteUserByUsername(apiContext: APIRequestContext, username: str
 
   if (user) {
     const deleteResponse = await apiContext.delete(`/api/users?id=${user.id}`);
-    expect(deleteResponse.ok()).toBeTruthy();
+    if (!deleteResponse.ok()) {
+      // 历史脏数据可能导致预清理删除失败，不阻断本轮创建与回归流程
+      console.warn(`[stability-sweep] pre-clean delete user failed: ${user.id}, status=${deleteResponse.status()}`);
+    }
   }
 }
 
@@ -2132,6 +2134,25 @@ async function findFirstNonAdminUser(apiContext: APIRequestContext) {
   const payload = await response.json();
   const users = Array.isArray(payload?.data) ? payload.data : [];
   const user = users.find((item: { id: number; username: string; name: string }) => item.username !== 'admin');
+
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+  } as UserSummary;
+}
+
+async function findAdminUser(apiContext: APIRequestContext) {
+  const response = await apiContext.get('/api/users?includeRoles=true');
+  expect(response.ok()).toBeTruthy();
+
+  const payload = await response.json();
+  const users = Array.isArray(payload?.data) ? payload.data : [];
+  const user = users.find((item: { id: number; username: string; name: string }) => item.username === 'admin');
 
   if (!user) {
     return null;

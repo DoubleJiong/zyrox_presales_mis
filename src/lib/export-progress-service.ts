@@ -168,7 +168,7 @@ export const EXPORT_FIELD_CONFIGS: Record<string, ExportField[]> = {
     { key: 'contactEmail', label: '联系邮箱', width: 20, visible: true },
     { key: 'address', label: '详细地址', width: 30, visible: true },
     { key: 'status', label: '客户状态', width: 10, visible: true },
-    { key: 'totalAmount', label: '历史成交金额', width: 15, visible: true },
+    { key: 'totalAmount', label: '历史中标总额', width: 15, visible: true },
     { key: 'currentProjectCount', label: '当前项目数', width: 12, visible: true },
     { key: 'description', label: '客户描述', width: 30, visible: false },
     { key: 'createdAt', label: '创建时间', width: 18, visible: true },

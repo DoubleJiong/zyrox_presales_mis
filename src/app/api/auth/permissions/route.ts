@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth-middleware';
 import { db } from '@/db';
-import { users, roles } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { users, roles, userRoles } from '@/db/schema';
+import { eq, isNull } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/api-response';
 
 /**
  * GET /api/auth/permissions
  * 获取当前用户权限信息（用于前端权限控制）
+ * 合并主角色（users.roleId）和附加角色（sys_user_role）的权限
  */
 export const GET = withAuth(async (request: NextRequest, { userId }) => {
   try {
@@ -32,17 +33,46 @@ export const GET = withAuth(async (request: NextRequest, { userId }) => {
 
     const user = result[0];
 
-    // 判断是否为超级管理员
-    const normalizedRoleCode = user.roleCode?.toUpperCase() || null;
-    const isSuperAdmin = normalizedRoleCode === 'ADMIN' || normalizedRoleCode === 'SUPER_ADMIN' || (user.permissions || []).includes('*');
+    // 查询附加角色（sys_user_role 表），合并权限
+    const additionalRoles = await db
+      .select({
+        roleCode: roles.roleCode,
+        permissions: roles.permissions,
+      })
+      .from(userRoles)
+      .leftJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.userId, userId));
+
+    // 合并所有权限（主角色 + 附加角色），去重
+    const allPermissions: string[] = [...(user.permissions || [])];
+    let primaryRoleCode = user.roleCode;
+    let isSuperAdmin = false;
+
+    // 检查主角色是否为超级管理员
+    const primaryNormalized = user.roleCode?.toUpperCase() || null;
+    if (primaryNormalized === 'ADMIN' || primaryNormalized === 'SUPER_ADMIN' || (user.permissions || []).includes('*')) {
+      isSuperAdmin = true;
+    }
+
+    for (const ar of additionalRoles) {
+      const arNormalized = ar.roleCode?.toUpperCase() || null;
+      if (arNormalized === 'ADMIN' || arNormalized === 'SUPER_ADMIN' || (ar.permissions || []).includes('*')) {
+        isSuperAdmin = true;
+      }
+      for (const p of (ar.permissions || [])) {
+        if (!allPermissions.includes(p)) {
+          allPermissions.push(p);
+        }
+      }
+    }
 
     return successResponse({
       id: user.id,
       username: user.username,
       realName: user.realName,
       email: user.email,
-      roleCode: user.roleCode,
-      permissions: user.permissions || [],
+      roleCode: primaryRoleCode,
+      permissions: allPermissions,
       isSuperAdmin,
     });
   } catch (error) {

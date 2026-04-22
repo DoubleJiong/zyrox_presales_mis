@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { projects, projectTypes, users, customers } from '@/db/schema';
+import { projects, users, customers } from '@/db/schema';
 import { desc, eq, and, isNull, or, sql, count } from 'drizzle-orm';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/api-response';
 import { getProjectDisplayStatusLabel } from '@/lib/project-display';
@@ -62,9 +62,7 @@ export async function GET(
         id: projects.id,
         projectCode: projects.projectCode,
         projectName: projects.projectName,
-        projectTypeId: projects.projectTypeId,
         projectType: projects.projectType,
-        projectTypeName: projectTypes.name,
         projectStage: projects.projectStage,
         status: projects.status,
         priority: projects.priority,
@@ -84,7 +82,6 @@ export async function GET(
         customerName: projects.customerName,
       })
       .from(projects)
-      .leftJoin(projectTypes, eq(projects.projectTypeId, projectTypes.id))
       .leftJoin(users, eq(projects.managerId, users.id))
       .where(
         and(

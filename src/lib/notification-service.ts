@@ -7,9 +7,11 @@
 import { db } from '@/db';
 import { notifications, users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import type { MessageType, MessagePriority } from '@/lib/messages/constants';
 
-// 通知类型
-export type NotificationType = 'system' | 'task' | 'approval' | 'reminder' | 'message';
+// 通知类型（统一引用 constants，此处保留别名供旧调用方兼容）
+/** @deprecated 请使用 @/lib/messages/constants 中的 MessageType */
+export type NotificationType = MessageType;
 
 // 通知级别
 export type NotificationLevel = 'info' | 'warning' | 'error' | 'success';
@@ -18,7 +20,7 @@ export type NotificationLevel = 'info' | 'warning' | 'error' | 'success';
 export interface CreateNotificationParams {
   title: string;
   content: string;
-  type: NotificationType;
+  type: MessageType;
   level?: NotificationLevel;
   receiverId: number;
   senderId?: number;
@@ -163,7 +165,7 @@ export class NotificationService {
     return this.send({
       title,
       content,
-      type: 'message',
+      type: 'system',
       level: 'info',
       receiverId,
       senderId,

@@ -10,13 +10,12 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle } from 'lucide-react';
-
-interface DictOption {
-  value: string;
-  label: string;
-  sort: number;
-  extraData?: Record<string, any>;
-}
+import {
+  type DictOption,
+  getCachedOptions,
+  setCachedOptions,
+  fetchDictionaryOptions,
+} from './dict-cache';
 
 interface DictSelectProps {
   /** 字典分类编码 */
@@ -39,10 +38,6 @@ interface DictSelectProps {
   allowClear?: boolean;
 }
 
-// 缓存字典数据
-const dictCache: Record<string, { data: DictOption[]; timestamp: number }> = {};
-const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
-
 export function DictSelect({
   category,
   value,
@@ -59,10 +54,10 @@ export function DictSelect({
   const [error, setError] = useState<string | null>(null);
 
   const loadOptions = useCallback(async () => {
-    // 检查缓存
-    const cached = dictCache[category];
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      setOptions(cached.data);
+    // 检查共享缓存
+    const cached = getCachedOptions(category);
+    if (cached) {
+      setOptions(cached);
       setLoading(false);
       return;
     }
@@ -71,20 +66,11 @@ export function DictSelect({
       setLoading(true);
       setError(null);
 
-      const url = `/api/dictionary/options?categories=${category}${includeInactive ? '&includeInactive=true' : ''}`;
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.success && data.data[category]) {
-        const optionsData = data.data[category];
-        // 更新缓存
-        dictCache[category] = {
-          data: optionsData,
-          timestamp: Date.now(),
-        };
-        setOptions(optionsData);
+      const result = await fetchDictionaryOptions([category], includeInactive);
+      if (result[category]) {
+        setOptions(result[category]);
       } else {
-        setError(data.error || '加载失败');
+        setError('加载失败');
         setOptions([]);
       }
     } catch (err) {
@@ -164,33 +150,12 @@ export function DictSelect({
  * 批量获取多个字典分类的选项（用于表单预加载）
  */
 export async function loadDictionaryOptions(categories: string[]): Promise<Record<string, DictOption[]>> {
-  if (categories.length === 0) return {};
-
-  try {
-    const url = `/api/dictionary/options?categories=${categories.join(',')}`;
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.success) {
-      // 更新缓存
-      Object.entries(data.data).forEach(([category, options]) => {
-        dictCache[category] = {
-          data: options as DictOption[],
-          timestamp: Date.now(),
-        };
-      });
-      return data.data;
-    }
-  } catch (error) {
-    console.error('Failed to load dictionary options:', error);
-  }
-
-  return {};
+  return fetchDictionaryOptions(categories);
 }
 
 /**
  * 获取单个字典分类的选项（同步，从缓存读取）
  */
 export function getDictOptions(category: string): DictOption[] {
-  return dictCache[category]?.data || [];
+  return getCachedOptions(category) || [];
 }

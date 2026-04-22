@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { arbitrations, users, projects } from '@/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/api-response';
+import { sendMessage } from '@/lib/messages/send';
 
 // GET - 获取仲裁列表
 export async function GET() {
@@ -64,6 +65,22 @@ export async function POST(request: NextRequest) {
         priority: body.priority || 'medium',
       })
       .returning();
+
+    // 通知审批人有新的仲裁申请待处理
+    if (body.approverId) {
+      sendMessage({
+        receiverId: body.approverId,
+        senderId: body.initiatorId || undefined,
+        title: '有新的仲裁申请待您审批',
+        content: `仲裁申请《${body.title}》已提交，请尽快处理。`,
+        type: 'approval',
+        priority: body.priority === 'urgent' ? 'urgent' : 'normal',
+        relatedType: 'arbitration',
+        relatedId: newArbitration[0].id,
+        actionUrl: `/arbitrations`,
+        actionText: '查看仲裁',
+      }).catch(() => {});
+    }
 
     return NextResponse.json(newArbitration[0], { status: 201 });
   } catch (error) {

@@ -29,6 +29,7 @@ export interface TransitionProjectStageInput {
   triggerType: ProjectStageTriggerType;
   triggerId?: number | null;
   reason?: string | null;
+  skipPolicyCheck?: boolean;
 }
 
 export async function transitionProjectStage(input: TransitionProjectStageInput) {
@@ -46,7 +47,7 @@ export async function transitionProjectStage(input: TransitionProjectStageInput)
     );
   }
 
-  if (!canTransitionProjectStage(project.projectStage, input.toStage)) {
+  if (!input.skipPolicyCheck && !canTransitionProjectStage(project.projectStage, input.toStage)) {
     throw new ProjectStageTransitionError(
       'INVALID_STAGE_TRANSITION',
       `不允许从 ${project.projectStage} 迁移到 ${input.toStage}`,

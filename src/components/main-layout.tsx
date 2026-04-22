@@ -15,8 +15,8 @@ import { MobileNav } from '@/components/mobile-nav';
 export function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      {/* 桌面端侧边栏 - 移动端隐藏 */}
-      <div className="hidden md:block">
+      {/* 桌面端侧边栏 - 移动端隐藏，固定在左侧不随页面滚动 */}
+      <div className="hidden md:block sticky top-0 h-screen">
         <Sidebar />
       </div>
       

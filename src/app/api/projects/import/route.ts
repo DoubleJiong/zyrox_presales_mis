@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { withAuth } from '@/lib/auth-middleware';
 import { db } from '@/db';
-import { projects, customers, users, attributes, projectTypes } from '@/db/schema';
+import { projects, customers, users, attributes, subsidiaries } from '@/db/schema';
 import { sql, eq, and, isNull } from 'drizzle-orm';
 import * as XLSX from 'xlsx';
 import * as iconv from 'iconv-lite';
@@ -10,6 +10,7 @@ import { PROJECT_STAGE_CONFIG, PROJECT_STATUS_CONFIG } from '@/lib/utils/status-
 import { resolveProjectLifecycleForCreate } from '@/lib/project-lifecycle';
 import {
   normalizeImportedProjectCustomerTypeOrIndustry,
+  normalizeImportedRegion,
   PROJECT_IMPORT_TEMPLATE_EXAMPLE,
   PROJECT_IMPORT_TEMPLATE_HEADERS,
 } from '@/lib/project-field-mappings';
@@ -115,6 +116,7 @@ const FIELD_MAPPING: Record<string, string> = {
   '年份': 'year',
   '年度': 'year',
   '资金来源': 'fundSource',
+  '承接公司': 'contractingCompanyName',
   '招标方式': 'biddingMethod',
   '标签': 'tags',
 };
@@ -268,25 +270,15 @@ function buildProjectStageMap(): Map<string, { projectStage: string; bidResult?:
 }
 
 // 区域映射
-const REGION_MAP: Record<string, string> = {
-  '华北': '华北', '华东': '华东', '华南': '华南', '华中': '华中',
-  '西北': '西北', '西南': '西南', '东北': '东北', '港澳台': '港澳台',
-  '海外': '海外', '全国': '全国',
-  '北京': '华北', '天津': '华北', '河北': '华北', '山西': '华北', '内蒙古': '华北',
-  '上海': '华东', '江苏': '华东', '浙江': '华东', '安徽': '华东', '福建': '华东', '江西': '华东', '山东': '华东',
-  '广东': '华南', '广西': '华南', '海南': '华南',
-  '河南': '华中', '湖北': '华中', '湖南': '华中',
-  '重庆': '西南', '四川': '西南', '贵州': '西南', '云南': '西南', '西藏': '西南',
-  '陕西': '西北', '甘肃': '西北', '青海': '西北', '宁夏': '西北', '新疆': '西北',
-  '辽宁': '东北', '吉林': '东北', '黑龙江': '东北',
-};
+function buildProjectTypeMap(projectTypeList: Array<{ code: string | null; name: string | null }>): Map<string, { code: string; name: string }> {
+  const map = new Map<string, { code: string; name: string }>();
 
-function buildProjectTypeMap(projectTypeList: Array<{ id: number; name: string; code: string }>): Map<string, { id: number; name: string; code: string }> {
-  const map = new Map<string, { id: number; name: string; code: string }>();
-
-  projectTypeList.forEach((projectType) => {
-    setLookupValue(map, projectType.name, projectType);
-    setLookupValue(map, projectType.code, projectType);
+  projectTypeList.forEach((pt) => {
+    const code = pt.code || '';
+    const name = pt.name || code;
+    const entry = { code, name };
+    setLookupValue(map, name, entry);
+    setLookupValue(map, code, entry);
   });
 
   return map;
@@ -360,11 +352,11 @@ function validateProjectData(
   existingNames: Set<string>,
   customerMap: Map<string, { id: number; name: string }>,
   userMap: Map<string, { id: number; name: string }>,
-  projectTypeMap: Map<string, { id: number; name: string; code: string }>,
+  projectTypeMap: Map<string, { name: string; code: string }>,
   stageMap: Map<string, { projectStage: string; bidResult?: string | null }>,
   statusMap: Map<string, string>,
-  regionMap: Map<string, string>,
   priorityMap: Map<string, string>,
+  subsidiaryMap: Map<string, { id: number; name: string }>,
 ): { valid: boolean; error?: string; data?: any } {
   const errors: string[] = [];
   
@@ -383,7 +375,7 @@ function validateProjectData(
     projectName: project.projectName,
     customerName: project.customerName || '',
     customerId: null,
-    projectTypeId: null,
+    projectTypeId: null, // deprecated
     managerId: null,
     industry: null,
     region: null,
@@ -400,6 +392,7 @@ function validateProjectData(
     year: null,
     fundSource: project.fundSource || '',
     tags: project.tags || '',
+    contractingCompanyName: project.contractingCompanyName || '',
   };
 
   // 解析客户
@@ -412,11 +405,11 @@ function validateProjectData(
     }
   }
 
-  // 解析项目类型
+  // 解析项目类型（使用字典匹配）
   if (project.projectTypeName) {
     const projectType = findLookupValue(projectTypeMap, project.projectTypeName);
     if (projectType) {
-      data.projectTypeId = projectType.id;
+      data.projectType = projectType.code;
     } else {
       errors.push(`项目类型 "${project.projectTypeName}" 不存在`);
     }
@@ -462,14 +455,20 @@ function validateProjectData(
     }
   }
 
-  // 解析行业
+  // 解析行业（兼容中英文标签；若无法识别则保留原值并给出警告）
   if (project.industry) {
-    data.industry = normalizeImportedProjectCustomerTypeOrIndustry(project.industry);
+    const normalizedIndustry = normalizeImportedProjectCustomerTypeOrIndustry(project.industry);
+    if (normalizedIndustry === project.industry.trim()) {
+      // 未能匹配任何已知行业枚举，给出提示（不阻断导入，保留原值）
+      errors.push(`客户类型/行业 "${project.industry}" 无法识别，请使用：高校/高职/中专/K12/政府/企业/军警/医院/教育/医疗/金融/制造/科技/其他`);
+    } else {
+      data.industry = normalizedIndustry;
+    }
   }
 
-  // 解析区域
+  // 解析区域（规范化为宏区域，支持宏区域名/省级短名/省级全称如"北京市"）
   if (project.region) {
-    data.region = findLookupValue(regionMap, project.region) || REGION_MAP[project.region] || project.region;
+    data.region = normalizeImportedRegion(project.region);
   }
 
   // 解析负责人
@@ -482,11 +481,21 @@ function validateProjectData(
     }
   }
 
+  // 解析承接公司
+  if (project.contractingCompanyName) {
+    const subsidiary = subsidiaryMap.get(project.contractingCompanyName);
+    if (!subsidiary) {
+      errors.push(`承接公司 "${project.contractingCompanyName}" 不存在，请使用系统中已有的分子公司名称`);
+    }
+  }
+
   // 解析金额
   if (project.estimatedAmount) {
     const amount = parseFloat(project.estimatedAmount.replace(/[,，]/g, ''));
     if (!isNaN(amount)) {
       data.estimatedAmount = amount;
+    } else {
+      errors.push(`预计金额 "${project.estimatedAmount}" 格式无效，请填写数字（如：8000000）`);
     }
   }
 
@@ -517,9 +526,30 @@ function validateProjectData(
     return null;
   };
 
-  data.startDate = parseDate(project.startDate || '');
-  data.endDate = parseDate(project.endDate || '');
-  data.expectedDeliveryDate = parseDate(project.expectedDeliveryDate || '');
+  if (project.startDate) {
+    const parsed = parseDate(project.startDate);
+    if (parsed) {
+      data.startDate = parsed;
+    } else {
+      errors.push(`开始日期 "${project.startDate}" 格式无效，请使用 YYYY-MM-DD`);
+    }
+  }
+  if (project.endDate) {
+    const parsed = parseDate(project.endDate);
+    if (parsed) {
+      data.endDate = parsed;
+    } else {
+      errors.push(`结束日期 "${project.endDate}" 格式无效，请使用 YYYY-MM-DD`);
+    }
+  }
+  if (project.expectedDeliveryDate) {
+    const parsed = parseDate(project.expectedDeliveryDate);
+    if (parsed) {
+      data.expectedDeliveryDate = parsed;
+    } else {
+      errors.push(`预计交付日期 "${project.expectedDeliveryDate}" 格式无效，请使用 YYYY-MM-DD`);
+    }
+  }
 
   // 解析年份
   if (project.year) {
@@ -600,7 +630,7 @@ export const POST = withAuth(async (request: NextRequest, context: { userId: num
     }
 
     // 加载关联数据
-    const [customerList, userList, projectTypeList, priorityDictItems, regionDictItems, existingProjectNames] = await Promise.all([
+    const [customerList, userList, projectTypeList, priorityDictItems, existingProjectNames, subsidiaryList] = await Promise.all([
       // 客户
       db.select({ id: customers.id, name: customers.customerName })
         .from(customers)
@@ -609,10 +639,14 @@ export const POST = withAuth(async (request: NextRequest, context: { userId: num
       db.select({ id: users.id, name: users.realName })
         .from(users)
         .where(sql`${users.deletedAt} IS NULL`),
-      // 项目类型
-      db.select({ id: projectTypes.id, name: projectTypes.name, code: projectTypes.code })
-        .from(projectTypes)
-        .where(sql`${projectTypes.deletedAt} IS NULL`),
+      // 项目类型（从字典）
+      db.select({ code: attributes.value, name: attributes.name })
+        .from(attributes)
+        .where(and(
+          eq(attributes.category, 'project_type'),
+          eq(attributes.status, 'active'),
+          isNull(attributes.deletedAt),
+        )),
       // 优先级字典
       db.select({ code: attributes.code, name: attributes.name, value: attributes.value })
         .from(attributes)
@@ -621,28 +655,24 @@ export const POST = withAuth(async (request: NextRequest, context: { userId: num
           eq(attributes.status, 'active'),
           isNull(attributes.deletedAt),
         )),
-      // 区域字典
-      db.select({ code: attributes.code, name: attributes.name, value: attributes.value })
-        .from(attributes)
-        .where(and(
-          eq(attributes.category, 'region'),
-          eq(attributes.status, 'active'),
-          isNull(attributes.deletedAt),
-        )),
       // 已存在的项目名称
       db.select({ projectName: projects.projectName })
         .from(projects)
         .where(sql`${projects.deletedAt} IS NULL`),
+      // 分子公司（用于承接公司匹配）
+      db.select({ id: subsidiaries.id, name: subsidiaries.subsidiaryName })
+        .from(subsidiaries)
+        .where(isNull(subsidiaries.deletedAt)),
     ]);
 
     // 建立映射
     const customerMap = new Map(customerList.map(c => [c.name, c]));
     const userMap = new Map(userList.map(u => [u.name, u]));
     const projectTypeMap = buildProjectTypeMap(projectTypeList);
+    const subsidiaryMap = new Map(subsidiaryList.map(s => [s.name, s]));
     const stageDictMap = buildProjectStageMap();
     const statusDictMap = buildProjectStatusMap();
     const priorityDictMap = buildAttributeValueMap(priorityDictItems, 'project_priority');
-    const regionDictMap = buildAttributeValueMap(regionDictItems, 'region');
     const existingNames = new Set(existingProjectNames.map(p => p.projectName));
 
     // 验证所有项目
@@ -652,7 +682,7 @@ export const POST = withAuth(async (request: NextRequest, context: { userId: num
 
     for (const project of projectList) {
       const rowNumber = parseInt(project._rowNumber || '0');
-      const result = validateProjectData(project, rowNumber, existingNames, customerMap, userMap, projectTypeMap, stageDictMap, statusDictMap, regionDictMap, priorityDictMap);
+      const result = validateProjectData(project, rowNumber, existingNames, customerMap, userMap, projectTypeMap, stageDictMap, statusDictMap, priorityDictMap, subsidiaryMap);
       
       validatedProjects.push({
         row: rowNumber,
@@ -709,7 +739,8 @@ export const POST = withAuth(async (request: NextRequest, context: { userId: num
           projectName: projectData.projectName,
           customerId: projectData.customerId,
           customerName: projectData.customerName,
-          projectTypeId: projectData.projectTypeId,
+          projectTypeId: null, // deprecated
+          projectType: projectData.projectType || null,
           projectStage: projectData.projectStage,
           status: projectData.status,
           bidResult: projectData.bidResult,
@@ -725,6 +756,9 @@ export const POST = withAuth(async (request: NextRequest, context: { userId: num
           risks: projectData.risks,
           year: projectData.year,
           fundSource: projectData.fundSource,
+          contractingCompanyId: projectData.contractingCompanyName
+            ? (subsidiaryMap.get(projectData.contractingCompanyName)?.id || null)
+            : null,
         });
         
         successCount++;

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
+import { resolveApiErrorToast } from '@/lib/api-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,6 +38,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { DictSelect } from '@/components/dictionary/dict-select';
 import { CustomerSelect } from '@/components/ui/customer-select';
 import { ProjectTypeSelect } from '@/components/ui/project-type-select';
+import { SubsidiarySelect } from '@/components/ui/subsidiary-select';
 import { ProjectQuickViewDrawer } from '@/components/project/project-quick-view-drawer';
 import { 
   AlertCircle, Plus, Upload, Download, Search, Edit, Trash2, 
@@ -49,10 +51,12 @@ import { PermissionButton, usePermissions } from '@/components/auth/PermissionPr
 import { PERMISSIONS } from '@/lib/permissions';
 import {
   PROJECT_STAGE_CONFIG,
+  PROJECT_STAGE_ORDER,
   type ProjectStage,
 } from '@/lib/utils/status-transitions';
 import {
   getProjectCustomerTypeOrIndustryLabel,
+  getRegionLabel,
   PROJECT_IMPORT_TEMPLATE_EXAMPLE,
   PROJECT_IMPORT_TEMPLATE_HEADERS,
 } from '@/lib/project-field-mappings';
@@ -63,9 +67,9 @@ import {
 } from '@/lib/customer-type-normalization';
 import {
   getProjectTypeDisplayLabel,
-  getProjectTypeOaCategoryLabel,
   normalizeProjectTypeCodes,
 } from '@/lib/project-type-codec';
+import { REGION_ITEMS } from '@/lib/config/dictionary-config';
 
 interface Project {
   id: number;
@@ -89,6 +93,9 @@ interface Project {
   region: string | null;
   description: string | null;
   risks: string | null; // 项目风险说明
+  fundSource: string | null;
+  contractingCompanyId: number | null;
+  contractingCompanyName: string | null;
   managerId: number | null;
   managerName?: string;
   createdAt: string;
@@ -105,7 +112,6 @@ interface Project {
 }
 
 type ViewMode = 'list' | 'grid' | 'kanban';
-type KanbanLane = 'opportunity' | 'pursuit' | 'delivery' | 'closed';
 type ProjectSortField = 'updatedAt' | 'estimatedAmount' | 'startDate' | 'expectedDeliveryDate';
 type ProjectSortDirection = 'asc' | 'desc';
 
@@ -127,21 +133,19 @@ const ACTIVE_PIPELINE_STAGES = new Set([
   'acceptance',
 ]);
 
-function getKanbanLane(stage: ProjectStage): KanbanLane {
-  if (stage === 'opportunity') {
-    return 'opportunity';
-  }
-
-  if (ACTIVE_PIPELINE_STAGES.has(stage)) {
-    if (stage === 'delivery_preparing' || stage === 'delivering' || stage === 'settlement' || stage === 'execution' || stage === 'acceptance') {
-      return 'delivery';
-    }
-
-    return 'pursuit';
-  }
-
-  return 'closed';
-}
+// 看板列颜色映射
+const KANBAN_COLUMN_COLORS: Record<string, string> = {
+  opportunity: 'bg-blue-50 border-blue-200',
+  bidding_pending: 'bg-amber-50 border-amber-200',
+  bidding: 'bg-orange-50 border-orange-200',
+  solution_review: 'bg-violet-50 border-violet-200',
+  contract_pending: 'bg-cyan-50 border-cyan-200',
+  delivery_preparing: 'bg-emerald-50 border-emerald-200',
+  delivering: 'bg-green-50 border-green-200',
+  settlement: 'bg-yellow-50 border-yellow-200',
+  archived: 'bg-slate-100 border-slate-300',
+  cancelled: 'bg-slate-100 border-slate-300',
+};
 
 function normalizeCustomerTypeFilterValue(value?: string | null): string {
   if (!value) {
@@ -154,6 +158,34 @@ function normalizeCustomerTypeFilterValue(value?: string | null): string {
   }
 
   return value.trim().toLowerCase();
+}
+
+// 将客户收录的区域文本（中文地名）映射到 region 字典编码
+// 兼容带后缀（北京市/北京）、浙江城市（杭州市(浙江)/杭州）等历史格式
+const REGION_NAME_TO_CODE: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
+  for (const item of REGION_ITEMS) {
+    const fullName = item.name; // e.g. '北京市', '杭州市(浙江)'
+    map[fullName] = item.code;
+    // Strip province/city suffix: '北京市'→'北京', '安徽省'→'安徽'
+    const stripped = fullName.replace(/[市省]$/, '').replace(/\(浙江\)$/, '').trim();
+    if (stripped && stripped !== fullName) {
+      map[stripped] = item.code;
+    }
+    // For Zhejiang cities like '杭州市(浙江)' also map '杭州市'
+    if (fullName.endsWith('(浙江)')) {
+      const withoutZj = fullName.replace('(浙江)', '').trim();
+      map[withoutZj] = item.code;
+      map[withoutZj.replace(/市$/, '')] = item.code;
+    }
+  }
+  return map;
+})();
+
+function normalizeCustomerRegionToCode(region?: string | null): string {
+  if (!region) return '';
+  const trimmed = region.trim();
+  return REGION_NAME_TO_CODE[trimmed] || trimmed;
 }
 
 export default function ProjectsPage() {
@@ -172,6 +204,7 @@ export default function ProjectsPage() {
   const [actualAmountFilter, setActualAmountFilter] = useState('all');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(ITEMS_PER_PAGE);
   const [sortField, setSortField] = useState<ProjectSortField>('updatedAt');
   const [sortDirection, setSortDirection] = useState<ProjectSortDirection>('desc');
   const [quickViewProjectId, setQuickViewProjectId] = useState<number | null>(null);
@@ -196,6 +229,8 @@ export default function ProjectsPage() {
     startDate: '',
     expectedDeliveryDate: '',
     description: '',
+    fundSource: '',
+    contractingCompanyId: undefined as number | undefined,
   });
 
   // 导入相关
@@ -477,15 +512,15 @@ export default function ProjectsPage() {
   });
 
   // 分页逻辑 - 基于过滤和排序后的项目数量计算总页数
-  const totalPages = Math.ceil(sortedProjects.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(sortedProjects.length / itemsPerPage);
   const paginatedProjects = sortedProjects.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, typeFilter, priorityFilter, estimatedAmountFilter, actualAmountFilter, sortField, sortDirection]);
+  }, [searchTerm, statusFilter, typeFilter, priorityFilter, estimatedAmountFilter, actualAmountFilter, sortField, sortDirection, itemsPerPage]);
 
   const getStageBadge = (project: Project) => {
     const stage = resolveEffectiveProjectStage(project);
@@ -536,7 +571,7 @@ export default function ProjectsPage() {
       <div className="flex flex-wrap gap-1">
         {typeCodes.map((code) => (
           <Badge key={`${project.id}-${code}`} variant="outline" className={compact ? 'text-[10px] px-1 py-0' : 'text-xs'}>
-            {getProjectTypeDisplayLabel(code)} / {getProjectTypeOaCategoryLabel(code)}
+            {getProjectTypeDisplayLabel(code)}
           </Badge>
         ))}
       </div>
@@ -579,11 +614,11 @@ export default function ProjectsPage() {
 
   const handleAddProject = async () => {
     // 验证必填字段
-    if (!newProject.projectName || !newProject.customerName || newProject.projectTypes.length === 0) {
+    if (!newProject.projectName || !newProject.customerName || newProject.projectTypes.length === 0 || !newProject.region) {
       toast({
         variant: 'destructive',
         title: '验证失败',
-        description: '请填写必填字段（项目名称、客户名称、项目类型）',
+        description: '请填写必填字段（项目名称、客户名称、项目类型、区域）',
       });
       return;
     }
@@ -645,6 +680,8 @@ export default function ProjectsPage() {
           startDate: today,
           expectedDeliveryDate: '',
           description: '',
+          fundSource: '',
+          contractingCompanyId: undefined,
         });
         await fetchProjects();
         toast({
@@ -652,14 +689,9 @@ export default function ProjectsPage() {
           description: editingProject ? '项目更新成功' : '项目创建成功',
         });
       } else {
-        // API 返回的错误格式: { success: false, error: { code, message } }
         const errorObj = (result as any)?.error;
-        const errorMsg = errorObj?.message || (typeof errorObj === 'string' ? errorObj : '操作失败，请稍后重试');
-        toast({
-          variant: 'destructive',
-          title: '操作失败',
-          description: errorMsg,
-        });
+        const { title, description } = resolveApiErrorToast(errorObj, '操作失败');
+        toast({ variant: 'destructive', title, description });
       }
     } catch (error) {
       console.error('Failed to create project:', error);
@@ -716,6 +748,8 @@ export default function ProjectsPage() {
       startDate: project.startDate || new Date().toISOString().split('T')[0],
       expectedDeliveryDate: project.expectedDeliveryDate || '',
       description: project.description || '',
+      fundSource: project.fundSource || '',
+      contractingCompanyId: project.contractingCompanyId ?? undefined,
     });
     // 重置名称检查状态，避免编辑时显示重名错误
     setProjectNameCheckStatus('idle');
@@ -815,13 +849,16 @@ export default function ProjectsPage() {
     link.click();
   };
 
-  // 看板视图列
-  const kanbanColumns: Array<{ id: KanbanLane; label: string; description: string; color: string }> = [
-    { id: 'opportunity', label: '商机阶段', description: '线索与商机准备', color: 'bg-slate-50 border-slate-200' },
-    { id: 'pursuit', label: '商务推进', description: '审批、投标与商务确认', color: 'bg-blue-50 border-blue-200' },
-    { id: 'delivery', label: '交付结算', description: '执行准备、交付与结算', color: 'bg-emerald-50 border-emerald-200' },
-    { id: 'closed', label: '已闭环', description: '归档或取消项目', color: 'bg-slate-100 border-slate-300' },
-  ];
+  // 看板视图列（基于 PROJECT_STAGE_ORDER 生成，每个阶段独立一列）
+  const kanbanColumns = PROJECT_STAGE_ORDER.map((stage) => {
+    const config = PROJECT_STAGE_CONFIG[stage];
+    return {
+      id: stage,
+      label: config.shortLabel,
+      description: config.description,
+      color: KANBAN_COLUMN_COLORS[stage] || 'bg-slate-50 border-slate-200',
+    };
+  });
 
   if (loading) {
     return (
@@ -900,17 +937,17 @@ export default function ProjectsPage() {
                       <div className="p-4 text-sm">
                         <div className="grid grid-cols-2 gap-3">
                           <div><strong className="text-red-500">*</strong>项目名称：必填</div>
-                          <div>客户名称：系统自动匹配已有客户</div>
+                          <div>客户名称：系统自动匹配已有客户，填写错误会报错</div>
                           <div>项目类型：软件开发/系统集成/咨询服务/运维服务/其他</div>
                           <div>项目阶段：商机阶段/招标投标/方案评审中/合同/商务确认中/执行准备中/执行中/结算中/已归档/已取消</div>
-                          <div>客户类型/行业：默认与客户保持一致，兼容历史行业值</div>
-                          <div>区域：华北/华东/华南/华中/西北/西南/东北等</div>
-                          <div>预计金额：数字</div>
-                          <div>优先级：高/中/低</div>
-                          <div>开始日期：YYYY-MM-DD</div>
-                          <div>负责人：系统自动匹配已有人员</div>
-                          <div>年份：如 2025</div>
-                          <div>标签：多个标签用逗号分隔</div>
+                          <div>客户类型/行业：高校/其他事业单位/中职/K12/政府/企业/军警/医院/教育/医疗/金融/制造/科技/其他，填写错误会报错</div>
+                          <div>区域：华北/华东/华南/华中/西北/西南/东北/港澳台/海外，支持省份名称如"北京市"</div>
+                          <div>预计金额：数字（如 8000000），格式错误会报错</div>
+                          <div>优先级：高/中/低，填写错误会报错</div>
+                          <div>开始日期/预计交付日期：YYYY-MM-DD，格式错误会报错</div>
+                          <div>负责人：系统自动匹配已有人员，填写错误会报错</div>
+                          <div>承接公司：需与系统分子公司名称完全一致，填写错误会报错</div>
+                          <div>年份：如 2025；标签：多个标签用逗号分隔</div>
                         </div>
                       </div>
                     </div>
@@ -961,7 +998,7 @@ export default function ProjectsPage() {
                           <tr>
                             <th className="p-2 text-left">行号</th>
                             <th className="p-2 text-left">项目名称</th>
-                            <th className="p-2 text-left">客户</th>
+                            <th className="p-2 text-left">客户名称</th>
                             <th className="p-2 text-left">状态</th>
                             <th className="p-2 text-left">结果</th>
                           </tr>
@@ -1114,7 +1151,9 @@ export default function ProjectsPage() {
                     estimatedAmount: '', 
                     startDate: today, 
                     expectedDeliveryDate: '', 
-                    description: '' 
+                    description: '',
+                    fundSource: '',
+                    contractingCompanyId: undefined,
                   }); 
                 }}
               >
@@ -1167,17 +1206,18 @@ export default function ProjectsPage() {
                     onValueChange={(value, customer) => {
                       if (customer) {
                         // 自动带入客户的区域和客户类型，以及默认项目类型
-                        setNewProject({ 
-                          ...newProject, 
+                        // 使用函数式更新避免 stale closure 覆盖已选中的项目类型
+                        setNewProject((prev) => ({
+                          ...prev,
                           customerName: value,
-                          region: customer.region || newProject.region,
-                          industry: customer.customerType || newProject.industry,
-                          projectType: customer.defaultProjectTypeCode || newProject.projectType,
-                          projectTypes: customer.defaultProjectTypeCode ? [customer.defaultProjectTypeCode] : newProject.projectTypes,
+                          region: normalizeCustomerRegionToCode(customer.region) || prev.region,
+                          industry: customer.customerType || prev.industry,
+                          projectType: customer.defaultProjectTypeCode || prev.projectType,
+                          projectTypes: customer.defaultProjectTypeCode ? [customer.defaultProjectTypeCode] : prev.projectTypes,
                           customerId: customer.id,
-                        });
+                        }));
                       } else {
-                        setNewProject({ ...newProject, customerName: value });
+                        setNewProject((prev) => ({ ...prev, customerName: value }));
                       }
                     }}
                     onSearch={searchCustomers}
@@ -1191,7 +1231,7 @@ export default function ProjectsPage() {
                       options={projectTypeOptions}
                       value={newProject.projectType}
                       values={newProject.projectTypes}
-                      onValuesChange={(values) => setNewProject({ ...newProject, projectTypes: values, projectType: values[0] || '' })}
+                      onValuesChange={(values) => setNewProject((prev) => ({ ...prev, projectTypes: values, projectType: values[0] || '' }))}
                       placeholder="搜索并选择项目类型"
                       multiple
                     />
@@ -1215,14 +1255,14 @@ export default function ProjectsPage() {
                     <p className="text-xs text-muted-foreground">默认由客户类型自动带入，兼容历史行业值</p>
                   </div>
                   <div className="space-y-2">
-                    <Label>区域</Label>
-                    <Input 
-                      value={newProject.region || ''} 
-                      readOnly 
-                      placeholder="选择客户后自动带入" 
-                      className="bg-muted"
+                    <Label>区域 <span className="text-red-500">*</span></Label>
+                    <DictSelect
+                      category="region"
+                      value={newProject.region || null}
+                      onValueChange={(value) => setNewProject((prev) => ({ ...prev, region: value }))}
+                      placeholder="请选择区域"
                     />
-                    <p className="text-xs text-muted-foreground">由客户区域自动带入</p>
+                    <p className="text-xs text-muted-foreground">由客户区域自动带入，可手动更改</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -1238,6 +1278,25 @@ export default function ProjectsPage() {
                   <div className="space-y-2">
                     <Label htmlFor="estimatedAmount">项目预算 <span className="text-red-500">*</span></Label>
                     <Input id="estimatedAmount" type="number" value={newProject.estimatedAmount} onChange={(e) => setNewProject({ ...newProject, estimatedAmount: e.target.value })} placeholder="请输入项目预算" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>资金来源</Label>
+                    <DictSelect
+                      category="fund_source"
+                      value={newProject.fundSource}
+                      onValueChange={(value) => setNewProject({ ...newProject, fundSource: value })}
+                      placeholder="请选择资金来源"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>承接公司</Label>
+                    <SubsidiarySelect
+                      value={newProject.contractingCompanyId}
+                      onValueChange={(value) => setNewProject({ ...newProject, contractingCompanyId: value })}
+                      placeholder="请选择承接公司"
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -1442,20 +1501,20 @@ export default function ProjectsPage() {
               <div className="text-center py-8 text-muted-foreground">暂无项目数据</div>
             ) : (
               <>
-                <div className="overflow-x-auto rounded-md border">
+                <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] rounded-md border">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="sticky top-0 z-30 bg-background">
                       <TableRow>
                         <TableHead className="sticky left-0 z-20 w-[260px] bg-background">项目名称</TableHead>
-                        <TableHead className="w-[180px]">客户</TableHead>
+                        <TableHead className="w-[180px]">客户名称</TableHead>
                         <TableHead className="w-[120px]">客户类型/行业</TableHead>
                         <TableHead className="w-[100px]">区域</TableHead>
                         <TableHead className="w-[220px]">项目类型 / OA 分类</TableHead>
                         <TableHead className="w-[140px]">项目阶段</TableHead>
                         <TableHead className="w-[100px]">优先级</TableHead>
                         <TableHead className="w-[120px]">{renderSortHeader('开始日期', 'startDate')}</TableHead>
-                        <TableHead className="w-[120px]">{renderSortHeader('预计交付', 'expectedDeliveryDate')}</TableHead>
-                        <TableHead className="w-[140px] text-right">{renderSortHeader('预计预算', 'estimatedAmount', 'right')}</TableHead>
+                        <TableHead className="w-[120px]">{renderSortHeader('预计交付日期', 'expectedDeliveryDate')}</TableHead>
+                        <TableHead className="w-[140px] text-right">{renderSortHeader('预计金额', 'estimatedAmount', 'right')}</TableHead>
                         <TableHead className="w-[120px]">负责人</TableHead>
                         <TableHead className="w-[120px]">{renderSortHeader('更新时间', 'updatedAt')}</TableHead>
                         <TableHead className="sticky right-0 z-20 w-[160px] bg-background text-right">操作</TableHead>
@@ -1494,7 +1553,7 @@ export default function ProjectsPage() {
                             </div>
                           </TableCell>
                           <TableCell>{project.industry ? getProjectCustomerTypeOrIndustryLabel(project.industry) : '-'}</TableCell>
-                          <TableCell>{project.region || '-'}</TableCell>
+                          <TableCell>{getRegionLabel(project.region) || '-'}</TableCell>
                           <TableCell>{renderProjectTypeBadges(project)}</TableCell>
                           <TableCell>
                             {getStageBadge(project)}
@@ -1559,57 +1618,74 @@ export default function ProjectsPage() {
                     </TableBody>
                   </Table>
                 </div>
-                {totalPages > 1 && (
-                  <nav aria-label="pagination" data-testid="pagination" className="flex items-center justify-between mt-4 pt-4 border-t">
-                    <div className="text-sm text-muted-foreground">
-                      显示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, sortedProjects.length)} 条，共 {sortedProjects.length} 条
+                <nav aria-label="pagination" data-testid="pagination" className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    显示 {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, sortedProjects.length)} 条，共 {sortedProjects.length} 条
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      每页
+                      <Select value={String(itemsPerPage)} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
+                        <SelectTrigger className="h-8 w-[70px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      条
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        上一页
-                      </Button>
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                          let pageNum;
-                          if (totalPages <= 5) {
-                            pageNum = i + 1;
-                          } else if (currentPage <= 3) {
-                            pageNum = i + 1;
-                          } else if (currentPage >= totalPages - 2) {
-                            pageNum = totalPages - 4 + i;
-                          } else {
-                            pageNum = currentPage - 2 + i;
-                          }
-                          return (
-                            <Button
-                              key={pageNum}
-                              variant={currentPage === pageNum ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => setCurrentPage(pageNum)}
-                            >
-                              {pageNum}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                      >
-                        下一页
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
-                  </nav>
-                )}
+                    {totalPages > 1 && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          上一页
+                        </Button>
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentPage - 2 + i;
+                            }
+                            return (
+                              <Button
+                                key={pageNum}
+                                variant={currentPage === pageNum ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setCurrentPage(pageNum)}
+                              >
+                                {pageNum}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          下一页
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </nav>
               </>
             )}
           </CardContent>
@@ -1715,57 +1791,74 @@ export default function ProjectsPage() {
                     </Card>
                   ))}
                 </div>
-                {totalPages > 1 && (
-                  <nav aria-label="pagination" data-testid="pagination" className="flex items-center justify-between mt-4 pt-4 border-t">
-                    <div className="text-sm text-muted-foreground">
-                      显示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, sortedProjects.length)} 条，共 {sortedProjects.length} 条
+                <nav aria-label="pagination" data-testid="pagination" className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    显示 {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, sortedProjects.length)} 条，共 {sortedProjects.length} 条
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      每页
+                      <Select value={String(itemsPerPage)} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
+                        <SelectTrigger className="h-8 w-[70px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      条
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        上一页
-                      </Button>
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                          let pageNum;
-                          if (totalPages <= 5) {
-                            pageNum = i + 1;
-                          } else if (currentPage <= 3) {
-                            pageNum = i + 1;
-                          } else if (currentPage >= totalPages - 2) {
-                            pageNum = totalPages - 4 + i;
-                          } else {
-                            pageNum = currentPage - 2 + i;
-                          }
-                          return (
-                            <Button
-                              key={pageNum}
-                              variant={currentPage === pageNum ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => setCurrentPage(pageNum)}
-                            >
-                              {pageNum}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                      >
-                        下一页
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
-                  </nav>
-                )}
+                    {totalPages > 1 && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          上一页
+                        </Button>
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentPage - 2 + i;
+                            }
+                            return (
+                              <Button
+                                key={pageNum}
+                                variant={currentPage === pageNum ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setCurrentPage(pageNum)}
+                              >
+                                {pageNum}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          下一页
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </nav>
               </>
             )}
           </CardContent>
@@ -1776,21 +1869,18 @@ export default function ProjectsPage() {
       {viewMode === 'kanban' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">项目看板 ({filteredProjects.length})</h3>
+            <h3 className="text-lg font-semibold">项目看板 ({sortedProjects.length})</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex gap-3 overflow-x-auto pb-2">
             {kanbanColumns.map((column) => {
-              const columnProjects = paginatedProjects.filter((project) => getKanbanLane(resolveEffectiveProjectStage(project)) === column.id);
+              const columnProjects = sortedProjects.filter((project) => resolveEffectiveProjectStage(project) === column.id);
               return (
-                <div key={column.id} className={`border rounded-lg p-3 space-y-2 ${column.color}`}>
+                <div key={column.id} className={`border rounded-lg p-3 space-y-2 min-w-[220px] w-[220px] flex-shrink-0 ${column.color}`}>
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-semibold text-sm">{column.label}</h4>
-                      <p className="text-[10px] text-muted-foreground">{column.description}</p>
-                    </div>
+                    <h4 className="font-semibold text-sm">{column.label}</h4>
                     <Badge variant="secondary" className="text-xs">{columnProjects.length}</Badge>
                   </div>
-                  <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 260px)' }}>
                     {columnProjects.map((project) => (
                       <Card key={project.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openProjectDrilldown(project.id)}>
                         <CardHeader className="pb-1 pt-2 px-2">
@@ -1844,7 +1934,6 @@ export default function ProjectsPage() {
                           <div className="flex items-center justify-between">
                             {getPriorityBadge(project.priority)}
                             <div className="flex items-center gap-1">
-                              {getStageBadge(project)}
                               {renderProjectTypeBadges(project, true)}
                             </div>
                           </div>
@@ -1879,59 +1968,6 @@ export default function ProjectsPage() {
               );
             })}
           </div>
-          
-          {/* 看板视图分页 */}
-          {totalPages > 1 && (
-            <nav aria-label="pagination" data-testid="pagination" className="flex items-center justify-between pt-4 border-t">
-              <div className="text-sm text-muted-foreground">
-                显示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, sortedProjects.length)} 条，共 {sortedProjects.length} 条
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  上一页
-                </Button>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={currentPage === pageNum ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setCurrentPage(pageNum)}
-                      >
-                        {pageNum}
-                      </Button>
-                    );
-                  })}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  下一页
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            </nav>
-          )}
         </div>
       )}
 

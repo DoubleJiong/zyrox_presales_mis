@@ -31,10 +31,19 @@ export function isValidEmail(email: string): boolean {
 }
 
 /**
- * 验证手机号格式（中国大陆）
+ * 验证手机/电话号码格式（中国大陆）
+ * 支持：手机号（11位移动号）、座机（区号-号码）、带国家代码
  */
 export function isValidPhone(phone: string): boolean {
   if (!phone) return false;
-  const phonePattern = /^1[3-9]\d{9}$/;
-  return phonePattern.test(phone);
+  const trimmed = phone.trim();
+  // 手机号：1[3-9]开头11位
+  if (/^1[3-9]\d{9}$/.test(trimmed)) return true;
+  // 座机：(区号-)? 7-8位号码 (-分机)?
+  if (/^(\d{3,4}-)?\d{7,8}(-\d{1,6})?$/.test(trimmed)) return true;
+  // 括号区号：(区号)号码
+  if (/^\(\d{3,4}\)\d{7,8}$/.test(trimmed)) return true;
+  // 带国家代码：+86- 或 86-
+  if (/^(\+?86-)?(\d{3,4}-)?\d{7,8}(-\d{1,6})?$/.test(trimmed)) return true;
+  return false;
 }

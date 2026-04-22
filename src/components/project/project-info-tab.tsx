@@ -33,7 +33,7 @@ import {
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  DollarSign, 
+  Banknote, 
   Calendar, 
   Edit3, 
   Plus, 
@@ -367,7 +367,7 @@ export function ProjectInfoTab({ projectId, projectInfo, readOnly = false, onUpd
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
+                <Banknote className="h-5 w-5" />
                 预算与时间
               </CardTitle>
               <CardDescription>项目的预算规划和时间安排</CardDescription>

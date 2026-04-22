@@ -63,6 +63,7 @@ export function getStageBgColor(stage: string): string {
     settlement: 'bg-yellow-50 text-yellow-700 border-yellow-200',
     archived: 'bg-gray-50 text-gray-600 border-gray-200',
     cancelled: 'bg-gray-50 text-gray-500 border-gray-200',
+    suspended: 'bg-yellow-50 text-yellow-700 border-yellow-200',
     execution: 'bg-green-50 text-green-700 border-green-200',
     acceptance: 'bg-purple-50 text-purple-700 border-purple-200',
   };
@@ -84,6 +85,7 @@ export function getStageProgressColor(stage: string): string {
     settlement: 'bg-yellow-500',
     archived: 'bg-gray-400',
     cancelled: 'bg-gray-400',
+    suspended: 'bg-yellow-400',
     execution: 'bg-green-500',
     acceptance: 'bg-purple-500',
   };
@@ -151,6 +153,7 @@ export function getStageLabel(stage: string): string {
     settlement: '结算中',
     archived: '已归档',
     cancelled: '已取消',
+    suspended: '已搁置',
     execution: '实施阶段',
     acceptance: '验收阶段',
   };
@@ -172,6 +175,7 @@ export function getStageShortLabel(stage: string): string {
     settlement: '结算',
     archived: '归档',
     cancelled: '取消',
+    suspended: '搁置',
     execution: '实施',
     acceptance: '验收',
   };

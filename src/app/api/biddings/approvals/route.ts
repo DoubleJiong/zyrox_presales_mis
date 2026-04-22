@@ -7,10 +7,10 @@
  */
 
 import { NextRequest } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { eq, and, inArray, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { projectBiddings, projects } from '@/db/schema';
+import { projectBiddings, projects, messages, approvalRequests, roles, users } from '@/db/schema';
 import { withAuth } from '@/lib/auth-middleware';
 import { errorResponse, successResponse } from '@/lib/api-response';
 import { getPermissionContext } from '@/lib/permissions/data-scope';
@@ -165,6 +165,46 @@ export const POST = withAuth(async (
           comment: typeof details?.comment === 'string' ? details.comment : null,
         });
 
+        // 通知所有管理员审批人：新的投标立项审批待审核
+        try {
+          const adminUsers = await db
+            .select({ id: users.id })
+            .from(users)
+            .innerJoin(roles, eq(users.roleId, roles.id))
+            .where(
+              and(
+                eq(users.status, 'active'),
+                isNull(users.deletedAt),
+                inArray(roles.roleCode, ['admin', 'super_admin', 'system_admin'])
+              )
+            );
+          if (adminUsers.length > 0) {
+            await db.insert(messages).values(
+              adminUsers
+                .filter((u) => u.id !== context.userId)
+                .map((u) => ({
+                  title: '投标立项审批待处理',
+                  content: `项目「${project.projectName}」已提交投标立项审批，请及时审核。`,
+                  type: 'approval' as const,
+                  category: 'project',
+                  priority: 'high' as const,
+                  receiverId: u.id,
+                  senderId: context.userId,
+                  relatedType: 'approval',
+                  relatedId: approvalRequest.approvalRequestId,
+                  relatedName: project.projectName,
+                  actionUrl: `/projects/${projectId}?tab=approval`,
+                  actionText: '处理审批',
+                  isRead: false,
+                  isDeleted: false,
+                  updatedAt: new Date(),
+                }))
+            );
+          }
+        } catch (msgErr) {
+          console.error('[Approval] Failed to write submit notification:', msgErr);
+        }
+
         return successResponse({
           message: '审批提交成功',
           projectId,
@@ -271,6 +311,36 @@ export const PUT = withAuth(async (
           comment,
         });
 
+        // 通知提交人审批已通过
+        try {
+          const [approval] = await db
+            .select({ initiatorId: approvalRequests.initiatorId, title: approvalRequests.title })
+            .from(approvalRequests)
+            .where(eq(approvalRequests.id, resolvedApprovalRequestId))
+            .limit(1);
+          if (approval?.initiatorId && approval.initiatorId !== context.userId) {
+            await db.insert(messages).values({
+              title: '投标立项审批已通过',
+              content: `您提交的「${approval.title}」已审批通过，项目将进入投标阶段。${comment ? `审批意见：${comment}` : ''}`,
+              type: 'approval',
+              category: 'project',
+              priority: 'high',
+              receiverId: approval.initiatorId,
+              senderId: context.userId,
+              relatedType: 'approval',
+              relatedId: resolvedApprovalRequestId,
+              relatedName: approval.title,
+              actionUrl: `/projects/${result.projectId}?tab=bidding`,
+              actionText: '查看投标',
+              isRead: false,
+              isDeleted: false,
+              updatedAt: new Date(),
+            });
+          }
+        } catch (msgErr) {
+          console.error('[Approval] Failed to write approve notification:', msgErr);
+        }
+
         return successResponse({
           message: '审批通过',
           projectId: result.projectId,
@@ -284,6 +354,36 @@ export const PUT = withAuth(async (
           operatorId: context.userId,
           comment,
         });
+
+        // 通知提交人审批已驳回
+        try {
+          const [approval] = await db
+            .select({ initiatorId: approvalRequests.initiatorId, title: approvalRequests.title })
+            .from(approvalRequests)
+            .where(eq(approvalRequests.id, resolvedApprovalRequestId))
+            .limit(1);
+          if (approval?.initiatorId && approval.initiatorId !== context.userId) {
+            await db.insert(messages).values({
+              title: '投标立项审批已驳回',
+              content: `您提交的「${approval.title}」已被驳回，项目返回商机阶段。${comment ? `驳回原因：${comment}` : ''}`,
+              type: 'approval',
+              category: 'project',
+              priority: 'urgent',
+              receiverId: approval.initiatorId,
+              senderId: context.userId,
+              relatedType: 'approval',
+              relatedId: resolvedApprovalRequestId,
+              relatedName: approval.title,
+              actionUrl: `/projects/${result.projectId}?tab=approval`,
+              actionText: '查看审批',
+              isRead: false,
+              isDeleted: false,
+              updatedAt: new Date(),
+            });
+          }
+        } catch (msgErr) {
+          console.error('[Approval] Failed to write reject notification:', msgErr);
+        }
 
         return successResponse({
           message: '审批拒绝',

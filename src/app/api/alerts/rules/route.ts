@@ -4,6 +4,7 @@ import { alertRules, users } from '@/db/schema';
 import { desc, eq, and, isNull, inArray, sql } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { withAuth } from '@/lib/auth-middleware';
+import { alertScheduler } from '@/lib/alert-scheduler';
 
 function isAlertRuleSequenceDriftError(error: unknown) {
   const databaseError = error as { cause?: { code?: string; constraint_name?: string } };
@@ -108,6 +109,10 @@ export const POST = withAuth(async (
       recipientIds,
       description,
       createdBy,
+      // Phase 3 fields
+      sceneTemplate,
+      triggerType,
+      cronExpression,
     } = body;
 
     // 验证必填字段
@@ -136,6 +141,10 @@ export const POST = withAuth(async (
       description: description || '',
       createdBy: createdBy || context.userId,
       triggerCount: 0,
+      // Phase 3
+      sceneTemplate: sceneTemplate || null,
+      triggerType: triggerType || 'threshold',
+      cronExpression: cronExpression || null,
     };
 
     console.log('Creating alert rule with data:', JSON.stringify(insertData, null, 2));
@@ -158,6 +167,11 @@ export const POST = withAuth(async (
         .insert(alertRules)
         .values(insertData)
         .returning();
+    }
+
+    // Register cron with pg-boss if this is an active threshold rule
+    if (newRule.triggerType === 'threshold' && newRule.sceneTemplate && newRule.status === 'active') {
+      void alertScheduler.scheduleRule(newRule.id);
     }
 
     return successResponse({ ...newRule, message: '预警规则创建成功' });
@@ -204,6 +218,15 @@ export const PUT = withAuth(async (
       .where(eq(alertRules.id, id))
       .returning();
 
+    // Sync pg-boss schedule according to updated rule state
+    if (updatedRule.triggerType === 'threshold') {
+      if (updatedRule.status === 'inactive' || updatedRule.deletedAt) {
+        void alertScheduler.unscheduleRule(updatedRule.id);
+      } else if (updatedRule.status === 'active' && updatedRule.sceneTemplate) {
+        void alertScheduler.rescheduleRule(updatedRule.id);
+      }
+    }
+
     return successResponse({ ...updatedRule, message: '预警规则更新成功' });
   } catch (error) {
     console.error('Failed to update alert rule:', error);
@@ -247,6 +270,9 @@ export const DELETE = withAuth(async (
         updatedAt: new Date(),
       })
       .where(eq(alertRules.id, parseInt(id)));
+
+    // Remove cron job from pg-boss (fire-and-forget; errors logged internally)
+    void alertScheduler.unscheduleRule(parseInt(id));
 
     return successResponse({ id: parseInt(id), message: '预警规则删除成功' });
   } catch (error) {

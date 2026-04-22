@@ -1,17 +1,17 @@
 /**
- * 数据字典配置文件
- * 
+ * 数据字典配置文件（统一字典改造后）
+ *
  * 【重要说明】
- * 本文件中的字典配置仅供参考和初始化使用。
- * 系统运行时，所有下拉选项数据均从数据库读取（通过 DictSelect 组件）。
- * 
- * 数据权威来源：数据库 sys_dictionary_type 和 sys_dictionary_item 表
+ * 本文件是系统所有业务枚举的唯一权威定义。
+ * 系统运行时，下拉选项从数据库读取（通过 DictSelect 组件）。
+ * 本文件用于：
+ *   1. 记录系统中使用的字典分类和字典项
+ *   2. 初始化数据库字典数据（通过 /api/dictionary/sync 接口）
+ *   3. 运行时回退（数据库无数据时静默降级）
+ *   4. 代码参考和文档用途
+ *
+ * 数据权威来源：数据库 sys_attribute_category + sys_attribute 表
  * 数据获取方式：/api/dictionary/options?categories={category}
- * 
- * 本文件的作用：
- * 1. 记录系统中使用的字典分类和字典项
- * 2. 初始化数据库字典数据（通过 /api/dictionary/sync 接口）
- * 3. 代码参考和文档用途
  */
 
 // ============================================
@@ -24,147 +24,27 @@ export interface DictCategoryConfig {
   description: string;
   icon: string;
   isSystem: boolean;
+  /** 引用此分类的模块/字段 */
+  referencedBy: string[];
 }
 
 export const DICT_CATEGORIES: DictCategoryConfig[] = [
-  // 客户管理相关
+  // ── 客户管理 ──────────────────────────────────────────────
   {
     code: 'customer_status',
-      name: '客户状态',
-      description: '客户的当前跟进状态',
-      icon: 'CircleDot',
-      isSystem: true,
-    },
-  {
-    code: 'demand_type',
-    name: '需求类型',
-    description: '客户需求类型分类',
-    icon: 'FileText',
-    isSystem: true,
-  },
-  {
-    code: 'intent_level',
-    name: '意向等级',
-    description: '客户购买意向等级',
-    icon: 'Target',
-    isSystem: true,
-  },
-
-  // 组织架构相关
-  {
-    code: 'department',
-    name: '部门',
-    description: '组织架构部门分类',
-    icon: 'Building',
-    isSystem: true,
-  },
-  {
-    code: 'user_status',
-    name: '用户状态',
-    description: '用户账户状态',
+    name: '客户状态',
+    description: '客户的当前跟进状态',
     icon: 'CircleDot',
     isSystem: true,
+    referencedBy: ['customers.status'],
   },
-  {
-    code: 'gender',
-    name: '性别',
-    description: '性别分类',
-    icon: 'User',
-    isSystem: true,
-  },
-
-  // 项目管理相关
-  {
-    code: 'project_type',
-    name: '项目类型',
-    description: '项目的业务类型分类',
-    icon: 'FolderKanban',
-    isSystem: true,
-  },
-  {
-    code: 'project_status',
-    name: '项目状态',
-    description: '项目的当前进展状态',
-    icon: 'CircleDot',
-    isSystem: true,
-  },
-  {
-    code: 'project_stage',
-    name: '项目阶段',
-    description: '项目的业务阶段（商机→投标→实施→沉淀）',
-    icon: 'Layers',
-    isSystem: true,
-  },
-
-  // 客户类型（原行业分类）
   {
     code: 'industry',
     name: '客户类型',
-    description: '客户类型分类',
+    description: '客户类型分类（原行业）',
     icon: 'Building',
     isSystem: true,
-  },
-  {
-    code: 'region',
-    name: '区域',
-    description: '地理区域划分',
-    icon: 'MapPin',
-    isSystem: true,
-  },
-  {
-    code: 'priority',
-    name: '优先级',
-    description: '任务/项目优先级',
-    icon: 'AlertCircle',
-    isSystem: true,
-  },
-
-  // 解决方案相关
-  {
-    code: 'solution_type',
-    name: '解决方案类型',
-    description: '解决方案的类型分类',
-    icon: 'FileCheck',
-    isSystem: true,
-  },
-  {
-    code: 'sub_scheme_type',
-    name: '子方案类型',
-    description: '子方案的类型分类',
-    icon: 'Layers',
-    isSystem: true,
-  },
-  {
-    code: 'solution_status',
-    name: '解决方案状态',
-    description: '解决方案的审核发布状态',
-    icon: 'CircleDot',
-    isSystem: true,
-  },
-  {
-    code: 'complexity',
-    name: '复杂度',
-    description: '解决方案/项目的复杂程度',
-    icon: 'Gauge',
-    isSystem: true,
-  },
-
-  // 商机管理
-  {
-    code: 'opportunity_stage',
-    name: '商机阶段',
-    description: '商机的跟进阶段',
-    icon: 'Lightbulb',
-    isSystem: true,
-  },
-
-  // 服务相关
-  {
-    code: 'service_type',
-    name: '服务类型',
-    description: '售前服务类型分类',
-    icon: 'Wrench',
-    isSystem: true,
+    referencedBy: ['customers.industry', 'projects.customerType'],
   },
   {
     code: 'followup_type',
@@ -172,22 +52,95 @@ export const DICT_CATEGORIES: DictCategoryConfig[] = [
     description: '客户跟进的方式类型',
     icon: 'MessageSquare',
     isSystem: true,
+    referencedBy: ['followups.type'],
   },
 
-  // 日程/待办相关
+  // ── 组织架构 ──────────────────────────────────────────────
+  {
+    code: 'department',
+    name: '部门',
+    description: '组织架构部门分类',
+    icon: 'Building',
+    isSystem: true,
+    referencedBy: ['users.department'],
+  },
+  {
+    code: 'user_status',
+    name: '用户状态',
+    description: '用户账户状态',
+    icon: 'CircleDot',
+    isSystem: true,
+    referencedBy: ['users.status'],
+  },
+  {
+    code: 'gender',
+    name: '性别',
+    description: '性别分类',
+    icon: 'User',
+    isSystem: true,
+    referencedBy: ['users.gender'],
+  },
+
+  // ── 项目管理 ──────────────────────────────────────────────
+  {
+    code: 'project_type',
+    name: '项目类型',
+    description: '项目的业务类型分类（14类，多选）',
+    icon: 'FolderKanban',
+    isSystem: true,
+    referencedBy: ['projects.projectTypes'],
+  },
+  {
+    code: 'project_stage',
+    name: '项目阶段',
+    description: '项目的业务阶段（11阶段状态机，含暂停）',
+    icon: 'Layers',
+    isSystem: true,
+    referencedBy: ['projects.stage', 'data-screen funnel'],
+  },
+  {
+    code: 'region',
+    name: '区域',
+    description: '省级行政区 + 浙江地市（42项）',
+    icon: 'MapPin',
+    isSystem: true,
+    referencedBy: ['projects.region', 'customers.region', 'data-screen region view'],
+  },
+  {
+    code: 'priority',
+    name: '优先级',
+    description: '任务/项目优先级',
+    icon: 'AlertCircle',
+    isSystem: true,
+    referencedBy: ['projects.priority', 'tasks.priority', 'todos.priority'],
+  },
+
+  // ── 解决方案 ──────────────────────────────────────────────
+  {
+    code: 'solution_status',
+    name: '解决方案状态',
+    description: '解决方案的审核发布状态',
+    icon: 'CircleDot',
+    isSystem: true,
+    referencedBy: ['solutions.status'],
+  },
+
+  // ── 日程/待办 ─────────────────────────────────────────────
   {
     code: 'schedule_type',
     name: '日程类型',
     description: '日程安排的类型',
     icon: 'Calendar',
     isSystem: true,
+    referencedBy: ['schedules.type'],
   },
   {
-    code: 'todo_type',
-    name: '待办类型',
-    description: '待办事项的类型',
-    icon: 'CheckSquare',
+    code: 'schedule_status',
+    name: '日程状态',
+    description: '日程的完成状态',
+    icon: 'CircleDot',
     isSystem: true,
+    referencedBy: ['schedules.status'],
   },
   {
     code: 'todo_status',
@@ -195,31 +148,25 @@ export const DICT_CATEGORIES: DictCategoryConfig[] = [
     description: '待办事项的完成状态',
     icon: 'CircleDot',
     isSystem: true,
+    referencedBy: ['todos.status'],
+  },
+  {
+    code: 'task_status',
+    name: '任务状态',
+    description: '任务的执行状态',
+    icon: 'CircleDot',
+    isSystem: true,
+    referencedBy: ['tasks.status'],
   },
 
-  // 工作日志
-  {
-    code: 'worklog_type',
-    name: '工作日志类型',
-    description: '工作日志的类型分类',
-    icon: 'FileText',
-    isSystem: true,
-  },
-
-  // 预警相关
-  {
-    code: 'alert_category',
-    name: '预警分类',
-    description: '预警规则分类',
-    icon: 'Bell',
-    isSystem: true,
-  },
+  // ── 预警 ──────────────────────────────────────────────────
   {
     code: 'alert_severity',
-      name: '预警严重程度',
+    name: '预警严重程度',
     description: '预警的严重级别',
     icon: 'AlertTriangle',
     isSystem: true,
+    referencedBy: ['alerts.severity'],
   },
   {
     code: 'alert_status',
@@ -227,31 +174,73 @@ export const DICT_CATEGORIES: DictCategoryConfig[] = [
     description: '预警的处理状态',
     icon: 'CircleDot',
     isSystem: true,
+    referencedBy: ['alerts.status'],
   },
   {
-    code: 'alert_target_type',
-    name: '预警目标类型',
-    description: '预警关联的目标类型',
-    icon: 'Target',
+    code: 'alert_rule_type',
+    name: '预警规则触发类型',
+    description: '预警规则的触发方式：信号型（事件驱动）或阈值型（定时扫描）',
+    icon: 'Bell',
     isSystem: true,
+    referencedBy: ['alertRules.triggerType'],
   },
-
-  // 成员角色
   {
-    code: 'member_role',
-    name: '项目成员角色',
-    description: '项目中的角色分工',
-    icon: 'Users',
+    code: 'alert_scene_template',
+    name: '预警场景模板',
+    description: '内置预警场景模板，管理员选择模板后配置参数，无需编写条件表达式',
+    icon: 'Bell',
     isSystem: true,
+    referencedBy: ['alertRules.sceneTemplate'],
+  },
+  {
+    code: 'alert_check_frequency',
+    name: '预警检查频率',
+    description: '阈值型预警规则的定时扫描频率，映射到 pg-boss cron 表达式',
+    icon: 'Clock',
+    isSystem: true,
+    referencedBy: ['alertRules.checkFrequency'],
+  },
+  {
+    code: 'alert_rule_status',
+    name: '预警规则状态',
+    description: '预警规则的启用状态',
+    icon: 'CircleDot',
+    isSystem: true,
+    referencedBy: ['alertRules.status'],
+  },
+  {
+    code: 'alert_history_status',
+    name: '预警历史状态',
+    description: '预警历史记录状态',
+    icon: 'CircleDot',
+    isSystem: true,
+    referencedBy: ['alertHistory.status'],
+  },
+  {
+    code: 'alert_channel',
+    name: '预警通道',
+    description: '预警通知的渠道类型',
+    icon: 'Bell',
+    isSystem: true,
+    referencedBy: ['alertRules.channel'],
+  },
+  {
+    code: 'risk_level',
+    name: '风险等级',
+    description: '项目/客户风险等级',
+    icon: 'AlertTriangle',
+    isSystem: true,
+    referencedBy: ['projects.riskLevel', 'data-screen risk'],
   },
 
-  // 招投标相关
+  // ── 招投标 ────────────────────────────────────────────────
   {
     code: 'bidding_method',
     name: '招标方式',
     description: '项目的招标方式',
     icon: 'FileText',
     isSystem: true,
+    referencedBy: ['bids.biddingMethod'],
   },
   {
     code: 'scoring_method',
@@ -259,20 +248,15 @@ export const DICT_CATEGORIES: DictCategoryConfig[] = [
     description: '投标评分办法',
     icon: 'Calculator',
     isSystem: true,
+    referencedBy: ['bids.scoringMethod'],
   },
   {
     code: 'fund_source',
     name: '资金来源',
-    description: '项目资金来源类型',
+    description: '项目资金来源类型（6项）',
     icon: 'Banknote',
     isSystem: true,
-  },
-  {
-    code: 'bid_type',
-    name: '投标类型',
-    description: '投标的具体类型',
-    icon: 'FileCheck',
-    isSystem: true,
+    referencedBy: ['projects.fundSource'],
   },
   {
     code: 'bid_result',
@@ -280,22 +264,91 @@ export const DICT_CATEGORIES: DictCategoryConfig[] = [
     description: '投标的中标结果',
     icon: 'Trophy',
     isSystem: true,
-  },
-  {
-    code: 'bond_status',
-    name: '保证金状态',
-    description: '投标保证金的缴纳状态',
-    icon: 'CircleDollarSign',
-    isSystem: true,
+    referencedBy: ['bids.result'],
   },
 
-  // 归档状态
+  // ── 合同 ──────────────────────────────────────────────────
   {
-    code: 'archive_status',
-    name: '归档状态',
-    description: '项目归档的状态',
-    icon: 'Archive',
+    code: 'contract_status',
+    name: '合同状态',
+    description: '合同的生命周期状态',
+    icon: 'FileCheck',
     isSystem: true,
+    referencedBy: ['contracts.status'],
+  },
+  {
+    code: 'contract_process_status',
+    name: '合同流程状态',
+    description: '合同审批流程状态',
+    icon: 'CircleDot',
+    isSystem: true,
+    referencedBy: ['contracts.processStatus'],
+  },
+  {
+    code: 'contract_sign_mode',
+    name: '合同签署方式',
+    description: '合同的签署方式',
+    icon: 'FileText',
+    isSystem: true,
+    referencedBy: ['contracts.signMode'],
+  },
+  {
+    code: 'contract_user_type',
+    name: '合同甲方类型',
+    description: '合同甲方的机构类型',
+    icon: 'Building',
+    isSystem: true,
+    referencedBy: ['contracts.userType'],
+  },
+  {
+    code: 'contract_project_category',
+    name: '合同项目分类',
+    description: '合同关联项目的分类',
+    icon: 'FolderKanban',
+    isSystem: true,
+    referencedBy: ['contracts.projectCategory'],
+  },
+  // ── 消息中心 ──────────────────────────────────────────────
+  {
+    code: 'message_type',
+    name: '消息类型',
+    description: '消息中心的消息类型，对应 sys_message.type',
+    icon: 'MessageSquare',
+    isSystem: true,
+    referencedBy: ['sys_message.type'],
+  },
+  {
+    code: 'message_priority',
+    name: '消息优先级',
+    description: '消息中心的消息优先级，对应 sys_message.priority',
+    icon: 'AlertCircle',
+    isSystem: true,
+    referencedBy: ['sys_message.priority'],
+  },
+  // ── 仲裁/绩效 ────────────────────────────────────────────
+  {
+    code: 'arbitration_status',
+    name: '仲裁状态',
+    description: '仲裁的处理状态',
+    icon: 'Scale',
+    isSystem: true,
+    referencedBy: ['arbitrations.status'],
+  },
+  {
+    code: 'arbitration_type',
+    name: '仲裁类型',
+    description: '仲裁的类型分类',
+    icon: 'Scale',
+    isSystem: true,
+    referencedBy: ['arbitrations.type'],
+  },
+  {
+    code: 'performance_status',
+    name: '绩效状态',
+    description: '绩效评估的状态',
+    icon: 'BarChart',
+    isSystem: true,
+    referencedBy: ['performance.status'],
   },
 ];
 
@@ -347,77 +400,101 @@ export const GENDER_ITEMS: DictItemConfig[] = [
   { code: '女', name: '女', sortOrder: 2 },
 ];
 
-// 需求类型
-export const DEMAND_TYPE_ITEMS: DictItemConfig[] = [
-  { code: 'software', name: '软件需求', sortOrder: 1 },
-  { code: 'hardware', name: '硬件需求', sortOrder: 2 },
-  { code: 'integration', name: '集成需求', sortOrder: 3 },
-  { code: 'consulting', name: '咨询服务', sortOrder: 4 },
-  { code: 'maintenance', name: '运维服务', sortOrder: 5 },
-  { code: 'training', name: '培训服务', sortOrder: 6 },
-  { code: 'other', name: '其他', sortOrder: 99 },
-];
-
-// 意向等级
-export const INTENT_LEVEL_ITEMS: DictItemConfig[] = [
-  { code: 'high', name: '高', sortOrder: 1, color: 'red' },
-  { code: 'medium', name: '中', sortOrder: 2, color: 'yellow' },
-  { code: 'low', name: '低', sortOrder: 3, color: 'gray' },
-];
-
-// 项目类型
+// 项目类型（14 类，多选 jsonb）
 export const PROJECT_TYPE_ITEMS: DictItemConfig[] = [
-  { code: 'software', name: '软件', sortOrder: 1 },
-  { code: 'integration', name: '集成', sortOrder: 2 },
-  { code: 'consulting', name: '咨询', sortOrder: 3 },
-  { code: 'maintenance', name: '维护', sortOrder: 4 },
-  { code: 'other', name: '其他', sortOrder: 99 },
+  { code: 'one_card', name: '一卡通', sortOrder: 1 },
+  { code: 'big_data', name: '大数据', sortOrder: 2 },
+  { code: 'iot', name: '物联网', sortOrder: 3 },
+  { code: 'smart_restaurant', name: '智慧餐厅', sortOrder: 4 },
+  { code: 'food_safety', name: '食安', sortOrder: 5 },
+  { code: 'smart_campus', name: '智慧校园', sortOrder: 6 },
+  { code: 'digital_twin', name: '数字孪生', sortOrder: 7 },
+  { code: 'system_integration', name: '系统集成', sortOrder: 8 },
+  { code: 'security', name: '安防项目', sortOrder: 9 },
+  { code: 'k12_project', name: 'K12项目', sortOrder: 10 },
+  { code: 'smart_logistics', name: '数智后勤', sortOrder: 11 },
+  { code: 'operation_logistics', name: '运营后勤', sortOrder: 12 },
+  { code: 'innovation', name: '创新项目', sortOrder: 13 },
+  { code: 'other', name: '其他类型', sortOrder: 99 },
 ];
 
-// 项目状态
-export const PROJECT_STATUS_ITEMS: DictItemConfig[] = [
-  { code: 'lead', name: '商机线索', sortOrder: 1, color: 'gray', description: '有项目线索和消息，但是主观判断并不一定会形成项目' },
-  { code: 'in_progress', name: '跟进中', sortOrder: 2, color: 'blue', description: '售前大多数项目为此状态，此状态项目涵盖整个项目生命周期，废标，重新招标的也在这个状态中' },
-  { code: 'won', name: '已中标', sortOrder: 3, color: 'green', description: '从收到中标通知书开始就可改为此状态，必须填写中标金额' },
-  { code: 'lost', name: '已丢标', sortOrder: 4, color: 'red', description: '项目已经丢标的明确状态' },
-  { code: 'on_hold', name: '已暂停', sortOrder: 5, color: 'yellow' },
-  { code: 'cancelled', name: '已取消', sortOrder: 6, color: 'gray' },
-];
-
-// 项目阶段
+// 项目阶段（11 阶段状态机，与 GOVERNED_PROJECT_STAGES 一一对应）
 export const PROJECT_STAGE_ITEMS: DictItemConfig[] = [
   { code: 'opportunity', name: '商机阶段', sortOrder: 1, color: 'blue' },
-  { code: 'bidding', name: '招标投标', sortOrder: 2, color: 'orange', description: '招投标阶段' },
-  { code: 'execution', name: '实施阶段', sortOrder: 3, color: 'green' },
-  { code: 'acceptance', name: '验收阶段', sortOrder: 4, color: 'purple' },
-  { code: 'settlement', name: '结算阶段', sortOrder: 5, color: 'yellow' },
-  { code: 'archived', name: '归档', sortOrder: 6, color: 'gray' },
+  { code: 'bidding_pending', name: '投标立项待审批', sortOrder: 2, color: 'cyan' },
+  { code: 'bidding', name: '招标投标', sortOrder: 3, color: 'orange' },
+  { code: 'solution_review', name: '投标评标', sortOrder: 4, color: 'yellow' },
+  { code: 'contract_pending', name: '合同/商务确认中', sortOrder: 5, color: 'amber' },
+  { code: 'delivery_preparing', name: '执行准备中', sortOrder: 6, color: 'lime' },
+  { code: 'delivering', name: '执行中', sortOrder: 7, color: 'green' },
+  { code: 'settlement', name: '结算中', sortOrder: 8, color: 'teal' },
+  { code: 'archived', name: '已归档', sortOrder: 9, color: 'gray' },
+  { code: 'cancelled', name: '已取消', sortOrder: 10, color: 'red' },
+  { code: 'suspended', name: '已暂停', sortOrder: 11, color: 'yellow', description: '项目交付暂停，可恢复' },
 ];
 
 // 客户类型（数据库 type_code: industry）
-// 注意：此分类已改名为"客户类型"，但数据库代码保持 industry 不变
 export const INDUSTRY_ITEMS: DictItemConfig[] = [
   { code: 'university', name: '高校', sortOrder: 1 },
-  { code: 'government', name: '政府', sortOrder: 2 },
-  { code: 'enterprise', name: '企业', sortOrder: 3 },
-  { code: 'hospital', name: '医院', sortOrder: 4 },
-  { code: 'k12', name: 'K12', sortOrder: 5 },
-  { code: 'higher_vocational', name: '高职', sortOrder: 6 },
-  { code: 'secondary_vocational', name: '中专', sortOrder: 7 },
-  { code: 'military_police', name: '军警', sortOrder: 8 },
+  { code: 'k12', name: 'K12', sortOrder: 2 },
+  { code: 'secondary_vocational', name: '中职', sortOrder: 3 },
+  { code: 'enterprise', name: '企业', sortOrder: 4 },
+  { code: 'government', name: '政府', sortOrder: 5 },
+  { code: 'higher_vocational', name: '其他事业单位', sortOrder: 6 },
+  { code: 'military_police', name: '军警', sortOrder: 7 },
+  { code: 'hospital', name: '医院', sortOrder: 8 },
 ];
 
-// 区域
+// 区域（31 省级 + 浙江 11 地市 = 42）
 export const REGION_ITEMS: DictItemConfig[] = [
-  { code: '华北', name: '华北', sortOrder: 1 },
-  { code: '华东', name: '华东', sortOrder: 2 },
-  { code: '华南', name: '华南', sortOrder: 3 },
-  { code: '华中', name: '华中', sortOrder: 4 },
-  { code: '西北', name: '西北', sortOrder: 5 },
-  { code: '西南', name: '西南', sortOrder: 6 },
-  { code: '东北', name: '东北', sortOrder: 7 },
-  { code: '港澳台', name: '港澳台', sortOrder: 8 },
-  { code: '海外', name: '海外', sortOrder: 9 },
+  // 直辖市
+  { code: 'beijing', name: '北京市', sortOrder: 1 },
+  { code: 'tianjin', name: '天津市', sortOrder: 2 },
+  { code: 'shanghai', name: '上海市', sortOrder: 3 },
+  { code: 'chongqing', name: '重庆市', sortOrder: 4 },
+  // 省（按拼音序）
+  { code: 'anhui', name: '安徽省', sortOrder: 5 },
+  { code: 'fujian', name: '福建省', sortOrder: 6 },
+  { code: 'gansu', name: '甘肃省', sortOrder: 7 },
+  { code: 'guangdong', name: '广东省', sortOrder: 8 },
+  { code: 'guizhou', name: '贵州省', sortOrder: 9 },
+  { code: 'hainan', name: '海南省', sortOrder: 10 },
+  { code: 'hebei', name: '河北省', sortOrder: 11 },
+  { code: 'heilongjiang', name: '黑龙江省', sortOrder: 12 },
+  { code: 'henan', name: '河南省', sortOrder: 13 },
+  { code: 'hubei', name: '湖北省', sortOrder: 14 },
+  { code: 'hunan', name: '湖南省', sortOrder: 15 },
+  { code: 'jiangsu', name: '江苏省', sortOrder: 16 },
+  { code: 'jiangxi', name: '江西省', sortOrder: 17 },
+  { code: 'jilin', name: '吉林省', sortOrder: 18 },
+  { code: 'liaoning', name: '辽宁省', sortOrder: 19 },
+  { code: 'qinghai', name: '青海省', sortOrder: 20 },
+  { code: 'shandong', name: '山东省', sortOrder: 21 },
+  { code: 'shanxi', name: '山西省', sortOrder: 22 },
+  { code: 'shaanxi', name: '陕西省', sortOrder: 23 },
+  { code: 'sichuan', name: '四川省', sortOrder: 24 },
+  { code: 'yunnan', name: '云南省', sortOrder: 25 },
+  // 自治区
+  { code: 'guangxi', name: '广西壮族自治区', sortOrder: 26 },
+  { code: 'neimenggu', name: '内蒙古自治区', sortOrder: 27 },
+  { code: 'ningxia', name: '宁夏回族自治区', sortOrder: 28 },
+  { code: 'xinjiang', name: '新疆维吾尔自治区', sortOrder: 29 },
+  { code: 'xizang', name: '西藏自治区', sortOrder: 30 },
+  // 特别行政区 — 台湾省不含在内（无实际业务）
+  // 浙江省（含11地市展开）
+  { code: 'zj_hangzhou', name: '杭州市(浙江)', sortOrder: 31 },
+  { code: 'zj_ningbo', name: '宁波市(浙江)', sortOrder: 32 },
+  { code: 'zj_wenzhou', name: '温州市(浙江)', sortOrder: 33 },
+  { code: 'zj_jiaxing', name: '嘉兴市(浙江)', sortOrder: 34 },
+  { code: 'zj_huzhou', name: '湖州市(浙江)', sortOrder: 35 },
+  { code: 'zj_shaoxing', name: '绍兴市(浙江)', sortOrder: 36 },
+  { code: 'zj_jinhua', name: '金华市(浙江)', sortOrder: 37 },
+  { code: 'zj_quzhou', name: '衢州市(浙江)', sortOrder: 38 },
+  { code: 'zj_zhoushan', name: '舟山市(浙江)', sortOrder: 39 },
+  { code: 'zj_taizhou', name: '台州市(浙江)', sortOrder: 40 },
+  { code: 'zj_lishui', name: '丽水市(浙江)', sortOrder: 41 },
+  // 港澳
+  { code: 'hongkong', name: '香港特别行政区', sortOrder: 42 },
 ];
 
 // 优先级
@@ -428,22 +505,6 @@ export const PRIORITY_ITEMS: DictItemConfig[] = [
   { code: 'low', name: '低', sortOrder: 4, color: 'gray' },
 ];
 
-// 解决方案类型
-export const SOLUTION_TYPE_ITEMS: DictItemConfig[] = [
-  { code: 'technical', name: '技术方案', sortOrder: 1 },
-  { code: 'commercial', name: '商务方案', sortOrder: 2 },
-  { code: 'integrated', name: '综合方案', sortOrder: 3 },
-];
-
-// 子方案类型
-export const SUB_SCHEME_TYPE_ITEMS: DictItemConfig[] = [
-  { code: 'technical', name: '技术方案', sortOrder: 1 },
-  { code: 'business', name: '商务方案', sortOrder: 2 },
-  { code: 'architecture', name: '架构方案', sortOrder: 3 },
-  { code: 'implementation', name: '实施方案', sortOrder: 4 },
-  { code: 'other', name: '其他', sortOrder: 99 },
-];
-
 // 解决方案状态
 export const SOLUTION_STATUS_ITEMS: DictItemConfig[] = [
   { code: 'draft', name: '草稿', sortOrder: 1, color: 'gray' },
@@ -451,29 +512,6 @@ export const SOLUTION_STATUS_ITEMS: DictItemConfig[] = [
   { code: 'approved', name: '已审核', sortOrder: 3, color: 'green' },
   { code: 'rejected', name: '已拒绝', sortOrder: 4, color: 'red' },
   { code: 'published', name: '已发布', sortOrder: 5, color: 'purple' },
-];
-
-// 复杂度
-export const COMPLEXITY_ITEMS: DictItemConfig[] = [
-  { code: 'low', name: '低', sortOrder: 1, color: 'green' },
-  { code: 'medium', name: '中', sortOrder: 2, color: 'yellow' },
-  { code: 'high', name: '高', sortOrder: 3, color: 'red' },
-];
-
-// 商机阶段
-export const OPPORTUNITY_STAGE_ITEMS: DictItemConfig[] = [
-  { code: 'lead', name: '线索', sortOrder: 1, color: 'gray' },
-  { code: 'qualified', name: '合格线索', sortOrder: 2, color: 'blue' },
-  { code: 'proposal', name: '方案报价', sortOrder: 3, color: 'yellow' },
-  { code: 'negotiation', name: '招标投标', sortOrder: 4, color: 'green', description: '招投标阶段' },
-];
-
-// 服务类型
-export const SERVICE_TYPE_ITEMS: DictItemConfig[] = [
-  { code: 'analysis', name: '分析类', sortOrder: 1 },
-  { code: 'design', name: '设计类', sortOrder: 2 },
-  { code: 'presentation', name: '演示类', sortOrder: 3 },
-  { code: 'negotiation', name: '谈判类', sortOrder: 4 },
 ];
 
 // 跟进类型
@@ -497,14 +535,12 @@ export const SCHEDULE_TYPE_ITEMS: DictItemConfig[] = [
   { code: 'other', name: '其他', sortOrder: 99 },
 ];
 
-// 待办类型
-export const TODO_TYPE_ITEMS: DictItemConfig[] = [
-  { code: 'followup', name: '跟进', sortOrder: 1 },
-  { code: 'document', name: '文档', sortOrder: 2 },
-  { code: 'bidding', name: '投标', sortOrder: 3 },
-  { code: 'meeting', name: '会议', sortOrder: 4 },
-  { code: 'approval', name: '审批', sortOrder: 5 },
-  { code: 'other', name: '其他', sortOrder: 99 },
+// 日程状态
+export const SCHEDULE_STATUS_ITEMS: DictItemConfig[] = [
+  { code: 'pending', name: '待开始', sortOrder: 1, color: 'gray' },
+  { code: 'in_progress', name: '进行中', sortOrder: 2, color: 'blue' },
+  { code: 'completed', name: '已完成', sortOrder: 3, color: 'green' },
+  { code: 'cancelled', name: '已取消', sortOrder: 4, color: 'red' },
 ];
 
 // 待办状态
@@ -515,25 +551,13 @@ export const TODO_STATUS_ITEMS: DictItemConfig[] = [
   { code: 'cancelled', name: '已取消', sortOrder: 4, color: 'gray' },
 ];
 
-// 工作日志类型
-export const WORKLOG_TYPE_ITEMS: DictItemConfig[] = [
-  { code: 'development', name: '开发工作', sortOrder: 1 },
-  { code: 'meeting', name: '会议', sortOrder: 2 },
-  { code: 'visit', name: '外出拜访', sortOrder: 3 },
-  { code: 'documentation', name: '文档编写', sortOrder: 4 },
-  { code: 'communication', name: '沟通协调', sortOrder: 5 },
-  { code: 'followup', name: '客户跟进', sortOrder: 6 },
-  { code: 'bidding', name: '投标工作', sortOrder: 7 },
-  { code: 'project', name: '项目执行', sortOrder: 8 },
-  { code: 'other', name: '其他', sortOrder: 99 },
-];
-
-// 预警分类
-export const ALERT_CATEGORY_ITEMS: DictItemConfig[] = [
-  { code: 'system', name: '系统告警', sortOrder: 1 },
-  { code: 'business', name: '业务告警', sortOrder: 2 },
-  { code: 'security', name: '安全告警', sortOrder: 3 },
-  { code: 'performance', name: '性能告警', sortOrder: 4 },
+// 任务状态
+export const TASK_STATUS_ITEMS: DictItemConfig[] = [
+  { code: 'pending', name: '待处理', sortOrder: 1, color: 'gray' },
+  { code: 'in_progress', name: '进行中', sortOrder: 2, color: 'blue' },
+  { code: 'completed', name: '已完成', sortOrder: 3, color: 'green' },
+  { code: 'blocked', name: '受阻', sortOrder: 4, color: 'red' },
+  { code: 'cancelled', name: '已取消', sortOrder: 5, color: 'gray' },
 ];
 
 // 预警严重程度
@@ -544,33 +568,85 @@ export const ALERT_SEVERITY_ITEMS: DictItemConfig[] = [
   { code: 'critical', name: '严重', sortOrder: 4, color: 'red' },
 ];
 
-// 预警状态
+// 预警状态（bus_alert_history.status）
 export const ALERT_STATUS_ITEMS: DictItemConfig[] = [
-  { code: 'pending', name: '待处理', sortOrder: 1, color: 'yellow' },
+  { code: 'pending',     name: '待处理',   sortOrder: 1, color: 'yellow' },
+  { code: 'acknowledged', name: '已确认',  sortOrder: 2, color: 'blue' },
+  { code: 'resolved',    name: '已解决',   sortOrder: 3, color: 'green' },
+  { code: 'ignored',     name: '已忽略',   sortOrder: 4, color: 'gray' },
+  { code: 'auto_closed', name: '已自动关闭', sortOrder: 5, color: 'gray',
+    description: '条件已自愈，由系统自动关闭（仅阈值型预警）' },
+];
+
+// 预警规则触发类型（signal=事件驱动, threshold=定时扫描）
+export const ALERT_RULE_TYPE_ITEMS: DictItemConfig[] = [
+  { code: 'signal',    name: '信号型', sortOrder: 1,
+    description: '由业务事件触发（如项目丢单），写操作时立即触发' },
+  { code: 'threshold', name: '阈值型', sortOrder: 2,
+    description: '由定时扫描触发（如项目超期），按 cron 频率周期检查' },
+];
+
+// 预警场景模板（代码固化的业务场景，用户只配参数）
+export const ALERT_SCENE_TEMPLATE_ITEMS: DictItemConfig[] = [
+  { code: 'project_not_updated',   name: '项目长期未更新', sortOrder: 1,
+    description: '项目在 N 天内没有任何跟进记录或状态变更',
+    extraData: { triggerType: 'threshold', targetType: 'project' } },
+  { code: 'project_overdue',       name: '项目已超预期交付日', sortOrder: 2,
+    description: '项目已超过 expectedDeliveryDate 且仍在进行中',
+    extraData: { triggerType: 'threshold', targetType: 'project' } },
+  { code: 'project_near_deadline', name: '项目临近截止日期', sortOrder: 3,
+    description: '项目距离 expectedDeliveryDate 还有 N 天',
+    extraData: { triggerType: 'threshold', targetType: 'project' } },
+  { code: 'customer_inactive',     name: '客户长期未跟进', sortOrder: 4,
+    description: '客户在 N 天内没有任何跟进活动记录',
+    extraData: { triggerType: 'threshold', targetType: 'customer' } },
+  { code: 'project_lost_signal',   name: '项目发生丢单', sortOrder: 5,
+    description: '项目投标结果变为丢标，立即触发',
+    extraData: { triggerType: 'signal', targetType: 'project' } },
+];
+
+// 预警检查频率（映射到 pg-boss cron 表达式）
+export const ALERT_CHECK_FREQUENCY_ITEMS: DictItemConfig[] = [
+  { code: 'every_15min',    name: '每15分钟', sortOrder: 1,
+    extraData: { cron: '*/15 * * * *' } },
+  { code: 'every_30min',    name: '每30分钟', sortOrder: 2,
+    extraData: { cron: '*/30 * * * *' } },
+  { code: 'hourly',         name: '每小时',   sortOrder: 3,
+    extraData: { cron: '0 * * * *' } },
+  { code: 'daily_morning',  name: '每天上午9点', sortOrder: 4,
+    extraData: { cron: '0 9 * * *' } },
+  { code: 'weekly_monday',  name: '每周一上午9点', sortOrder: 5,
+    extraData: { cron: '0 9 * * 1' } },
+];
+
+// 预警规则状态
+export const ALERT_RULE_STATUS_ITEMS: DictItemConfig[] = [
+  { code: 'active', name: '启用', sortOrder: 1, color: 'green' },
+  { code: 'inactive', name: '停用', sortOrder: 2, color: 'gray' },
+];
+
+// 预警历史状态
+export const ALERT_HISTORY_STATUS_ITEMS: DictItemConfig[] = [
+  { code: 'triggered', name: '已触发', sortOrder: 1, color: 'red' },
   { code: 'acknowledged', name: '已确认', sortOrder: 2, color: 'blue' },
   { code: 'resolved', name: '已解决', sortOrder: 3, color: 'green' },
-  { code: 'ignored', name: '已忽略', sortOrder: 4, color: 'gray' },
+  { code: 'expired', name: '已过期', sortOrder: 4, color: 'gray' },
 ];
 
-// 预警目标类型
-export const ALERT_TARGET_TYPE_ITEMS: DictItemConfig[] = [
-  { code: 'project', name: '项目', sortOrder: 1 },
-  { code: 'customer', name: '客户', sortOrder: 2 },
-  { code: 'user', name: '用户', sortOrder: 3 },
-  { code: 'solution', name: '解决方案', sortOrder: 4 },
-  { code: 'opportunity', name: '商机', sortOrder: 5 },
-  { code: 'lead', name: '线索', sortOrder: 6 },
+// 预警通道
+export const ALERT_CHANNEL_ITEMS: DictItemConfig[] = [
+  { code: 'in_app', name: '站内消息', sortOrder: 1 },
+  { code: 'email', name: '邮件', sortOrder: 2 },
+  { code: 'wechat', name: '微信', sortOrder: 3 },
+  { code: 'sms', name: '短信', sortOrder: 4 },
 ];
 
-// 项目成员角色
-export const MEMBER_ROLE_ITEMS: DictItemConfig[] = [
-  { code: '项目经理', name: '项目经理', sortOrder: 1 },
-  { code: '技术负责人', name: '技术负责人', sortOrder: 2 },
-  { code: '售前工程师', name: '售前工程师', sortOrder: 3 },
-  { code: '开发工程师', name: '开发工程师', sortOrder: 4 },
-  { code: '测试工程师', name: '测试工程师', sortOrder: 5 },
-  { code: '产品经理', name: '产品经理', sortOrder: 6 },
-  { code: 'UI设计师', name: 'UI设计师', sortOrder: 7 },
+// 风险等级
+export const RISK_LEVEL_ITEMS: DictItemConfig[] = [
+  { code: 'none', name: '正常', sortOrder: 1, color: 'green' },
+  { code: 'low', name: '低风险', sortOrder: 2, color: 'blue' },
+  { code: 'medium', name: '需关注', sortOrder: 3, color: 'yellow' },
+  { code: 'high', name: '高风险', sortOrder: 4, color: 'red' },
 ];
 
 // 招标方式
@@ -590,19 +666,14 @@ export const SCORING_METHOD_ITEMS: DictItemConfig[] = [
   { code: 'technical', name: '技术评分法', sortOrder: 4 },
 ];
 
-// 资金来源
+// 资金来源（6 项）
 export const FUND_SOURCE_ITEMS: DictItemConfig[] = [
-  { code: 'government', name: '政府财政', sortOrder: 1 },
-  { code: 'self_funded', name: '自筹资金', sortOrder: 2 },
-  { code: 'loan', name: '银行贷款', sortOrder: 3 },
-  { code: 'mixed', name: '混合资金', sortOrder: 4 },
-];
-
-// 投标类型
-export const BID_TYPE_ITEMS: DictItemConfig[] = [
-  { code: 'independent', name: '独立投标', sortOrder: 1 },
-  { code: 'consortium', name: '联合体投标', sortOrder: 2 },
-  { code: 'subcontractor', name: '分包投标', sortOrder: 3 },
+  { code: 'bank_investment', name: '银行投资', sortOrder: 1 },
+  { code: 'operator_investment', name: '运营商投资', sortOrder: 2 },
+  { code: 'fiscal', name: '财政拨款', sortOrder: 3 },
+  { code: 'fire_self_funded', name: '消防自筹', sortOrder: 4 },
+  { code: 'loan', name: '贷款', sortOrder: 5 },
+  { code: 'mixed', name: '混合资金', sortOrder: 6 },
 ];
 
 // 投标结果
@@ -613,19 +684,83 @@ export const BID_RESULT_ITEMS: DictItemConfig[] = [
   { code: 'withdrawn', name: '已撤回', sortOrder: 4, color: 'yellow' },
 ];
 
-// 保证金状态
-export const BOND_STATUS_ITEMS: DictItemConfig[] = [
-  { code: 'unpaid', name: '未缴纳', sortOrder: 1, color: 'gray' },
-  { code: 'paid', name: '已缴纳', sortOrder: 2, color: 'green' },
-  { code: 'refunded', name: '已退还', sortOrder: 3, color: 'blue' },
-  { code: 'forfeited', name: '已没收', sortOrder: 4, color: 'red' },
+// 合同状态
+export const CONTRACT_STATUS_ITEMS: DictItemConfig[] = [
+  { code: 'drafting', name: '起草中', sortOrder: 1, color: 'gray' },
+  { code: 'reviewing', name: '审核中', sortOrder: 2, color: 'blue' },
+  { code: 'signed', name: '已签署', sortOrder: 3, color: 'green' },
+  { code: 'executing', name: '执行中', sortOrder: 4, color: 'cyan' },
+  { code: 'completed', name: '已完结', sortOrder: 5, color: 'teal' },
+  { code: 'terminated', name: '已终止', sortOrder: 6, color: 'red' },
 ];
 
-// 归档状态
-export const ARCHIVE_STATUS_ITEMS: DictItemConfig[] = [
-  { code: 'unarchived', name: '未归档', sortOrder: 1, color: 'gray' },
-  { code: 'archived', name: '已归档', sortOrder: 2, color: 'green' },
-  { code: 'partial', name: '部分归档', sortOrder: 3, color: 'yellow' },
+// 合同流程状态
+export const CONTRACT_PROCESS_STATUS_ITEMS: DictItemConfig[] = [
+  { code: 'pending', name: '待提交', sortOrder: 1, color: 'gray' },
+  { code: 'submitted', name: '已提交', sortOrder: 2, color: 'blue' },
+  { code: 'approved', name: '已通过', sortOrder: 3, color: 'green' },
+  { code: 'rejected', name: '已驳回', sortOrder: 4, color: 'red' },
+];
+
+// 合同签署方式（占位，用户后续提供）
+export const CONTRACT_SIGN_MODE_ITEMS: DictItemConfig[] = [
+  { code: 'offline', name: '线下签署', sortOrder: 1 },
+  { code: 'online', name: '线上签署', sortOrder: 2 },
+];
+
+// 合同甲方类型（占位，用户后续提供）
+export const CONTRACT_USER_TYPE_ITEMS: DictItemConfig[] = [
+  { code: 'government', name: '政府机构', sortOrder: 1 },
+  { code: 'enterprise', name: '企业单位', sortOrder: 2 },
+  { code: 'institution', name: '事业单位', sortOrder: 3 },
+];
+
+// 合同项目分类（占位，用户后续提供）
+export const CONTRACT_PROJECT_CATEGORY_ITEMS: DictItemConfig[] = [
+  { code: 'new_build', name: '新建项目', sortOrder: 1 },
+  { code: 'upgrade', name: '升级改造', sortOrder: 2 },
+  { code: 'maintenance', name: '运维服务', sortOrder: 3 },
+];
+
+// 仲裁状态
+export const ARBITRATION_STATUS_ITEMS: DictItemConfig[] = [
+  { code: 'pending', name: '待受理', sortOrder: 1, color: 'gray' },
+  { code: 'processing', name: '处理中', sortOrder: 2, color: 'blue' },
+  { code: 'resolved', name: '已裁决', sortOrder: 3, color: 'green' },
+  { code: 'closed', name: '已关闭', sortOrder: 4, color: 'gray' },
+];
+
+// 仲裁类型
+export const ARBITRATION_TYPE_ITEMS: DictItemConfig[] = [
+  { code: 'project_dispute', name: '项目争议', sortOrder: 1 },
+  { code: 'contract_dispute', name: '合同争议', sortOrder: 2 },
+  { code: 'performance_appeal', name: '绩效申诉', sortOrder: 3 },
+];
+
+// 绩效状态
+export const PERFORMANCE_STATUS_ITEMS: DictItemConfig[] = [
+  { code: 'pending', name: '待评估', sortOrder: 1, color: 'gray' },
+  { code: 'evaluating', name: '评估中', sortOrder: 2, color: 'blue' },
+  { code: 'completed', name: '已完成', sortOrder: 3, color: 'green' },
+  { code: 'appealed', name: '已申诉', sortOrder: 4, color: 'orange' },
+];
+
+// 消息类型
+export const MESSAGE_TYPE_ITEMS: DictItemConfig[] = [
+  { code: 'system',   name: '系统',  sortOrder: 1, color: 'purple' },
+  { code: 'task',     name: '任务',  sortOrder: 2, color: 'blue'   },
+  { code: 'alert',    name: '预警',  sortOrder: 3, color: 'orange' },
+  { code: 'approval', name: '审批',  sortOrder: 4, color: 'cyan'   },
+  { code: 'reminder', name: '提醒',  sortOrder: 5, color: 'cyan'   },
+  { code: 'mention',  name: '@提及', sortOrder: 6, color: 'green'  },
+];
+
+// 消息优先级
+export const MESSAGE_PRIORITY_ITEMS: DictItemConfig[] = [
+  { code: 'low',    name: '低',   sortOrder: 1, color: 'gray'   },
+  { code: 'normal', name: '普通', sortOrder: 2, color: 'blue'   },
+  { code: 'high',   name: '高',   sortOrder: 3, color: 'orange' },
+  { code: 'urgent', name: '紧急', sortOrder: 4, color: 'red'    },
 ];
 
 // ============================================
@@ -633,43 +768,54 @@ export const ARCHIVE_STATUS_ITEMS: DictItemConfig[] = [
 // ============================================
 
 export const ALL_DICT_ITEMS: DictCategoryItems[] = [
-  // customer_type 分类已在数据库中删除，统一使用 industry（客户类型）
+  // 客户管理
   { category: 'customer_status', items: CUSTOMER_STATUS_ITEMS },
-  // 组织架构相关
+  { category: 'industry', items: INDUSTRY_ITEMS },
+  { category: 'followup_type', items: FOLLOWUP_TYPE_ITEMS },
+  // 组织架构
   { category: 'department', items: DEPARTMENT_ITEMS },
   { category: 'user_status', items: USER_STATUS_ITEMS },
   { category: 'gender', items: GENDER_ITEMS },
-  { category: 'demand_type', items: DEMAND_TYPE_ITEMS },
-  { category: 'intent_level', items: INTENT_LEVEL_ITEMS },
+  // 项目管理
   { category: 'project_type', items: PROJECT_TYPE_ITEMS },
-  { category: 'project_status', items: PROJECT_STATUS_ITEMS },
   { category: 'project_stage', items: PROJECT_STAGE_ITEMS },
-  { category: 'industry', items: INDUSTRY_ITEMS },
   { category: 'region', items: REGION_ITEMS },
   { category: 'priority', items: PRIORITY_ITEMS },
-  { category: 'solution_type', items: SOLUTION_TYPE_ITEMS },
-  { category: 'sub_scheme_type', items: SUB_SCHEME_TYPE_ITEMS },
+  // 解决方案
   { category: 'solution_status', items: SOLUTION_STATUS_ITEMS },
-  { category: 'complexity', items: COMPLEXITY_ITEMS },
-  { category: 'opportunity_stage', items: OPPORTUNITY_STAGE_ITEMS },
-  { category: 'service_type', items: SERVICE_TYPE_ITEMS },
-  { category: 'followup_type', items: FOLLOWUP_TYPE_ITEMS },
+  // 日程/待办/任务
   { category: 'schedule_type', items: SCHEDULE_TYPE_ITEMS },
-  { category: 'todo_type', items: TODO_TYPE_ITEMS },
+  { category: 'schedule_status', items: SCHEDULE_STATUS_ITEMS },
   { category: 'todo_status', items: TODO_STATUS_ITEMS },
-  { category: 'worklog_type', items: WORKLOG_TYPE_ITEMS },
-  { category: 'alert_category', items: ALERT_CATEGORY_ITEMS },
-  { category: 'alert_severity', items: ALERT_SEVERITY_ITEMS },
-  { category: 'alert_status', items: ALERT_STATUS_ITEMS },
-  { category: 'alert_target_type', items: ALERT_TARGET_TYPE_ITEMS },
-  { category: 'member_role', items: MEMBER_ROLE_ITEMS },
+  { category: 'task_status', items: TASK_STATUS_ITEMS },
+  // 预警
+  { category: 'alert_severity',        items: ALERT_SEVERITY_ITEMS },
+  { category: 'alert_status',          items: ALERT_STATUS_ITEMS },
+  { category: 'alert_rule_type',       items: ALERT_RULE_TYPE_ITEMS },
+  { category: 'alert_rule_status',     items: ALERT_RULE_STATUS_ITEMS },
+  { category: 'alert_history_status',  items: ALERT_HISTORY_STATUS_ITEMS },
+  { category: 'alert_channel',         items: ALERT_CHANNEL_ITEMS },
+  { category: 'alert_scene_template',  items: ALERT_SCENE_TEMPLATE_ITEMS },
+  { category: 'alert_check_frequency', items: ALERT_CHECK_FREQUENCY_ITEMS },
+  { category: 'risk_level',            items: RISK_LEVEL_ITEMS },
+  // 招投标
   { category: 'bidding_method', items: BIDDING_METHOD_ITEMS },
   { category: 'scoring_method', items: SCORING_METHOD_ITEMS },
   { category: 'fund_source', items: FUND_SOURCE_ITEMS },
-  { category: 'bid_type', items: BID_TYPE_ITEMS },
   { category: 'bid_result', items: BID_RESULT_ITEMS },
-  { category: 'bond_status', items: BOND_STATUS_ITEMS },
-  { category: 'archive_status', items: ARCHIVE_STATUS_ITEMS },
+  // 合同
+  { category: 'contract_status', items: CONTRACT_STATUS_ITEMS },
+  { category: 'contract_process_status', items: CONTRACT_PROCESS_STATUS_ITEMS },
+  { category: 'contract_sign_mode', items: CONTRACT_SIGN_MODE_ITEMS },
+  { category: 'contract_user_type', items: CONTRACT_USER_TYPE_ITEMS },
+  { category: 'contract_project_category', items: CONTRACT_PROJECT_CATEGORY_ITEMS },
+  // 仲裁/绩效
+  { category: 'arbitration_status', items: ARBITRATION_STATUS_ITEMS },
+  { category: 'arbitration_type', items: ARBITRATION_TYPE_ITEMS },
+  { category: 'performance_status', items: PERFORMANCE_STATUS_ITEMS },
+  // 消息中心
+  { category: 'message_type',     items: MESSAGE_TYPE_ITEMS },
+  { category: 'message_priority', items: MESSAGE_PRIORITY_ITEMS },
 ];
 
 // ============================================

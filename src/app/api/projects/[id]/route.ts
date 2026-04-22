@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { projects, users, tasks, projectBudgetHistory, projectBiddings } from '@/db/schema';
+import { projects, users, tasks, projectBudgetHistory, projectBiddings, subsidiaries } from '@/db/schema';
 import { eq, sql, and, isNull, or } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
@@ -12,6 +12,8 @@ import { resolveProjectCustomerSnapshot } from '@/lib/project-customer-snapshot'
 import { formatDateField } from '@/lib/utils';
 import { isGovernedProjectStage } from '@/modules/project/project-stage-policy';
 import { normalizeProjectTypeCode, normalizeProjectTypeCodes, serializeProjectTypeCodes } from '@/lib/project-type-codec';
+import { alertBoss } from '@/lib/alert-scheduler';
+import type { SignalAlertJobData } from '@/lib/alert-executor';
 
 // GET - 获取项目详情
 export const GET = withAuth(async (
@@ -71,10 +73,14 @@ export const GET = withAuth(async (
         previousStatus: projects.previousStatus,
         holdReason: projects.holdReason,
         cancelReason: projects.cancelReason,
+        fundSource: projects.fundSource,
+        contractingCompanyId: projects.contractingCompanyId,
+        contractingCompanyName: subsidiaries.subsidiaryName,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
       })
       .from(projects)
+      .leftJoin(subsidiaries, eq(projects.contractingCompanyId, subsidiaries.id))
       .where(and(
         eq(projects.id, projectId),
         isNull(projects.deletedAt)
@@ -289,62 +295,13 @@ export const PUT = withAuth(async (
     let resolvedProjectTypeCode = originalProject.projectType;
 
     if (sanitizedBody.projectTypeId !== undefined || sanitizedBody.projectType !== undefined || sanitizedBody.projectTypes !== undefined) {
-      const { projectTypes } = await import('@/db/schema');
-      const activeProjectTypes = await db
-        .select({ id: projectTypes.id, code: projectTypes.code, name: projectTypes.name })
-        .from(projectTypes)
-        .where(isNull(projectTypes.deletedAt));
-
+      // 项目类型统一使用字典 code，不再查 sys_project_type
       const requestedProjectTypeCodes = normalizeProjectTypeCodes(sanitizedBody.projectTypes ?? sanitizedBody.projectType);
-      const resolvedCodes: string[] = [];
-
-      if ((sanitizedBody.projectType !== undefined || sanitizedBody.projectTypes !== undefined) && sanitizedBody.projectTypeId === undefined) {
-        resolvedProjectTypeId = undefined;
-      }
-
-      if (sanitizedBody.projectTypeId !== undefined && sanitizedBody.projectTypeId !== null && sanitizedBody.projectTypeId !== '') {
-        const typeById = activeProjectTypes.find((item) => item.id === Number(sanitizedBody.projectTypeId));
-
-        if (!typeById) {
-          return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
-        }
-
-        resolvedProjectTypeId = typeById.id;
-        resolvedProjectTypeCode = typeById.code;
-        if (requestedProjectTypeCodes.length === 0) {
-          resolvedCodes.push(typeById.code);
-        }
-      }
-
-      requestedProjectTypeCodes.forEach((requestedCode) => {
-        const normalizedRequestedCode = normalizeProjectTypeCode(requestedCode);
-        const matchedType = activeProjectTypes.find((item) => {
-          const normalizedCode = normalizeProjectTypeCode(item.code);
-          const normalizedName = normalizeProjectTypeCode(item.name);
-          return normalizedCode === normalizedRequestedCode
-            || normalizedName === normalizedRequestedCode
-            || `${normalizedName}项目` === normalizedRequestedCode;
-        });
-
-        if (!matchedType) {
-          throw new Error(`PROJECT_TYPE_NOT_FOUND:${requestedCode}`);
-        }
-
-        if (!resolvedProjectTypeId) {
-          resolvedProjectTypeId = matchedType.id;
-        }
-
-        if (!resolvedCodes.includes(matchedType.code)) {
-          resolvedCodes.push(matchedType.code);
-        }
-      });
-
-      if (!resolvedProjectTypeId) {
-        return errorResponse('BAD_REQUEST', '指定的项目类型不存在');
-      }
-
+      resolvedProjectTypeId = null; // deprecated
       resolvedProjectTypeCode = serializeProjectTypeCodes(
-        resolvedCodes.length > 0 ? resolvedCodes : normalizeProjectTypeCodes(originalProject.projectType)
+        requestedProjectTypeCodes.length > 0
+          ? requestedProjectTypeCodes
+          : normalizeProjectTypeCodes(originalProject.projectType)
       );
     }
 
@@ -384,6 +341,8 @@ export const PUT = withAuth(async (
       winCompetitor: sanitizedBody.winCompetitor !== undefined ? sanitizedBody.winCompetitor : undefined,
       contractNumber: sanitizedBody.contractNumber !== undefined ? sanitizedBody.contractNumber : undefined,
       lessonsLearned: sanitizedBody.lessonsLearned !== undefined ? sanitizedBody.lessonsLearned : undefined,
+      fundSource: sanitizedBody.fundSource !== undefined ? (sanitizedBody.fundSource || null) : undefined,
+      contractingCompanyId: sanitizedBody.contractingCompanyId !== undefined ? (sanitizedBody.contractingCompanyId || null) : undefined,
       updatedAt: new Date(),
     };
 
@@ -430,6 +389,18 @@ export const PUT = withAuth(async (
           ...biddingSyncData,
         });
       }
+    }
+
+    // Signal: fire alert-signal for project_lost_signal when bidResult becomes 'lost'
+    if (hasBidResultUpdate && resolvedBidResult === 'lost') {
+      const payload: SignalAlertJobData = {
+        sceneTemplate: 'project_lost_signal',
+        targetId: projectId,
+        targetType: 'project',
+        targetName: updatedProject.projectName,
+        alertData: { loseReason: sanitizedBody.loseReason ?? null },
+      };
+      void alertBoss.send('alert-signal', payload);
     }
 
     // BUG-003: 如果预算有变化，记录预算历史

@@ -42,13 +42,13 @@ export async function POST(request: NextRequest) {
 
       // 行业类型
       { category: 'industry', code: 'university', name: '高校', value: 'university', order: 1 },
-      { category: 'industry', code: 'government', name: '政府', value: 'government', order: 2 },
-      { category: 'industry', code: 'enterprise', name: '企业', value: 'enterprise', order: 3 },
-      { category: 'industry', code: 'hospital', name: '医院', value: 'hospital', order: 4 },
-      { category: 'industry', code: 'k12', name: 'K12', value: 'k12', order: 5 },
-      { category: 'industry', code: 'higher_vocational', name: '高职', value: 'higher_vocational', order: 6 },
-      { category: 'industry', code: 'secondary_vocational', name: '中专', value: 'secondary_vocational', order: 7 },
-      { category: 'industry', code: 'military_police', name: '军警', value: 'military_police', order: 8 },
+      { category: 'industry', code: 'k12', name: 'K12', value: 'k12', order: 2 },
+      { category: 'industry', code: 'secondary_vocational', name: '中职', value: 'secondary_vocational', order: 3 },
+      { category: 'industry', code: 'enterprise', name: '企业', value: 'enterprise', order: 4 },
+      { category: 'industry', code: 'government', name: '政府', value: 'government', order: 5 },
+      { category: 'industry', code: 'higher_vocational', name: '其他事业单位', value: 'higher_vocational', order: 6 },
+      { category: 'industry', code: 'military_police', name: '军警', value: 'military_police', order: 7 },
+      { category: 'industry', code: 'hospital', name: '医院', value: 'hospital', order: 8 },
 
       // 区域
       { category: 'region', code: 'north_china', name: '华北', value: '华北', order: 1 },

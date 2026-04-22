@@ -133,13 +133,33 @@ export function requiresCsrfCheck(method: string, path: string): boolean {
 // =====================================================
 
 // SQL注入检测模式
+// 核心原则：匹配 SQL 语句结构，而非孤立关键字。
+// 自由文本字段（项目描述、风险说明等）中可能合法地出现 SELECT/CREATE 等英文词，
+// 真实注入攻击总伴随典型的 SQL 语法结构（FROM / INTO / SET / TABLE 等），因此
+// 以"关键字 + 语法结构"组合作为判断依据，避免误报。
 const SQL_INJECTION_PATTERNS = [
-  /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE)\b)/i,
-  /(\b(UNION|JOIN)\b.*\b(SELECT|INSERT|UPDATE|DELETE)\b)/i,
-  /(--)|(\/\*)|(\*\/)/,  // SQL注释
-  /('|")\s*(OR|AND)\s*('|")/i,  // 字符串拼接
-  /\b(OR|AND)\s+\d+\s*=\s*\d+/i,  // 布尔注入
-  /;\s*(SELECT|INSERT|UPDATE|DELETE|DROP)/i,  // 多语句注入
+  // SELECT ... FROM（经典查询注入）
+  /(?<!:)\bSELECT\b[\s\S]{0,120}\bFROM\b/i,
+  // INSERT [OR ...] INTO（插入注入）
+  /(?<!:)\bINSERT\b[\s\S]{0,40}\bINTO\b/i,
+  // UPDATE ... SET col =（更新注入）
+  /(?<!:)\bUPDATE\b[\s\S]{0,80}\bSET\b\s+\w+\s*=/i,
+  // DELETE FROM（删除注入）
+  /(?<!:)\bDELETE\b\s+FROM\b/i,
+  // DROP / TRUNCATE TABLE|DATABASE|SCHEMA|INDEX|VIEW
+  /(?<!:)\b(?:DROP|TRUNCATE)\b\s+(?:TABLE|DATABASE|SCHEMA|INDEX|VIEW)\b/i,
+  // CREATE / ALTER TABLE|DATABASE|SCHEMA|INDEX|VIEW|PROCEDURE|FUNCTION
+  /(?<!:)\b(?:CREATE|ALTER)\b\s+(?:TABLE|DATABASE|SCHEMA|INDEX|VIEW|PROCEDURE|FUNCTION)\b/i,
+  // UNION SELECT（最常见注入手法）
+  /\bUNION\b[\s\S]{0,30}\bSELECT\b/i,
+  // SQL 注释标记后紧跟 SQL 关键字（注释绕过注入）
+  /((?:--|\/\*)\s*(?:SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|UNION)\b)/i,
+  // 字符串拼接注入：'OR' / "AND"
+  /('|")\s*(OR|AND)\s*('|")/i,
+  // 布尔盲注：OR 1=1 / AND 1=1
+  /\b(OR|AND)\s+\d+\s*=\s*\d+/i,
+  // 多语句注入：; SELECT / ; DROP 等
+  /;\s*(SELECT|INSERT|UPDATE|DELETE|DROP)/i,
 ];
 
 /**

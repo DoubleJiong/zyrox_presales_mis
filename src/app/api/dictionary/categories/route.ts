@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { attributeCategories } from '@/db/schema';
 import { eq, isNull, desc, asc, and } from 'drizzle-orm';
 import { canManageAttributeCategoryInGui } from '@/lib/config/dictionary-governance';
+import { withAuth } from '@/lib/auth-middleware';
 
 /**
  * GET /api/dictionary/categories
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
  * POST /api/dictionary/categories
  * 创建字典分类
  */
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { categoryCode, categoryName, description, icon, sortOrder, status } = body;
@@ -110,13 +111,13 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 /**
  * PUT /api/dictionary/categories
  * 更新字典分类
  */
-export async function PUT(request: NextRequest) {
+export const PUT = withAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { id, categoryName, description, icon, sortOrder, status } = body;
@@ -178,13 +179,13 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 /**
  * DELETE /api/dictionary/categories?id=xxx
  * 删除字典分类（软删除）
  */
-export async function DELETE(request: NextRequest) {
+export const DELETE = withAuth(async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
     const id = parseInt(searchParams.get('id') || '');
@@ -238,4 +239,4 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

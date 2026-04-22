@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { tasks, projects, users, schedules, projectMembers } from '@/db/schema';
+import { tasks, projects, users, schedules, projectMembers, messages } from '@/db/schema';
 import { desc, eq, and, like, sql, isNull, inArray } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
@@ -369,6 +369,40 @@ export const POST = withAuth(async (
       } catch (scheduleError) {
         // 日程创建失败不影响任务创建，仅记录日志
         console.error('Failed to create related schedule:', scheduleError);
+      }
+    }
+
+    // 通知被指派人（仅当指派对象不是创建人时）
+    if (parsedAssigneeId && parsedAssigneeId !== userId) {
+      try {
+        let taskProjectName = '';
+        if (parsedProjectId) {
+          const [proj] = await db
+            .select({ projectName: projects.projectName })
+            .from(projects)
+            .where(eq(projects.id, parsedProjectId))
+            .limit(1);
+          taskProjectName = proj?.projectName ?? '';
+        }
+        await db.insert(messages).values({
+          title: '新任务指派',
+          content: `您被指派了新任务「${taskName.trim()}」${taskProjectName ? `（项目：${taskProjectName}）` : ''}，请及时处理。`,
+          type: 'task',
+          category: 'task',
+          priority: priority === 'urgent' ? 'urgent' : priority === 'high' ? 'high' : 'normal',
+          receiverId: parsedAssigneeId,
+          senderId: userId,
+          relatedType: 'task',
+          relatedId: newTask.id,
+          relatedName: taskName.trim(),
+          actionUrl: `/tasks/${newTask.id}`,
+          actionText: '查看任务',
+          isRead: false,
+          isDeleted: false,
+          updatedAt: new Date(),
+        });
+      } catch (msgErr) {
+        console.error('[Tasks] Failed to write task assignment message:', msgErr);
       }
     }
 

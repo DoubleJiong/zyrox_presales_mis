@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { messages } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
+import { OperationLogService } from '@/lib/operation-log-service';
 
 // 标记消息为已读
 export const POST = withAuth(async (
@@ -38,6 +39,16 @@ export const POST = withAuth(async (
         { status: 404 }
       );
     }
+
+    // 操作日志
+    OperationLogService.log({
+      userId,
+      module: 'messages',
+      action: 'update',
+      resource: 'message',
+      resourceId: parseInt(id),
+      status: 'success',
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,

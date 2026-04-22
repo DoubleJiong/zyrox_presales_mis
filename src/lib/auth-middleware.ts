@@ -95,7 +95,7 @@ export function withAuth(
     }
 
     // 检查API权限
-    const permissionCheck = await checkApiPermission(userId, method, path);
+    const permissionCheck = await checkApiPermission(userId, method, path, req.nextUrl.search);
     if (!permissionCheck.allowed) {
       const response = errorResponse(
         'FORBIDDEN',

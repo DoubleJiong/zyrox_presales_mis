@@ -24,11 +24,11 @@ interface Notification {
   title: string;
   content: string;
   type: string;
-  level: string;
+  priority: string;
   senderId: number | null;
   senderName?: string;
   senderAvatar?: string;
-  link: string | null;
+  actionUrl: string | null;
   isRead: boolean;
   readAt: string | null;
   createdAt: string;
@@ -45,21 +45,22 @@ interface NotificationData {
 }
 
 // 获取通知类型图标
-const getNotificationIcon = (type: string, level: string) => {
-  if (level === 'error') return <AlertCircle className="h-4 w-4 text-destructive" />;
-  if (level === 'warning') return <AlertTriangle className="h-4 w-4 text-orange-500" />;
+const getNotificationIcon = (type: string, priority: string) => {
+  if (priority === 'urgent' || priority === 'high') return <AlertCircle className="h-4 w-4 text-destructive" />;
+  if (type === 'alert') return <AlertTriangle className="h-4 w-4 text-orange-500" />;
   if (type === 'reminder') return <Clock className="h-4 w-4 text-cyan-500" />;
   return <Info className="h-4 w-4 text-blue-500" />;
 };
 
 // 获取通知类型样式
-const getNotificationStyle = (level: string) => {
+const getNotificationStyle = (priority: string) => {
   const styles: Record<string, string> = {
-    error: 'border-l-destructive bg-destructive/5',
-    warning: 'border-l-orange-500 bg-orange-500/5',
-    info: 'border-l-blue-500 bg-blue-500/5',
+    urgent: 'border-l-destructive bg-destructive/5',
+    high: 'border-l-orange-500 bg-orange-500/5',
+    normal: 'border-l-blue-500 bg-blue-500/5',
+    low: 'border-l-blue-300 bg-blue-300/5',
   };
-  return styles[level] || styles.info;
+  return styles[priority] || styles.normal;
 };
 
 // 获取类型标签
@@ -133,11 +134,10 @@ export function NotificationBell() {
   const fetchUnreadCount = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const response = await fetch('/api/notifications/unread-count');
+      const response = await fetch('/api/messages/unread-count');
       const result = await response.json();
       if (result.success) {
-        // API 直接返回数字类型的 data
-        setUnreadCount(typeof result.data === 'number' ? result.data : 0);
+        setUnreadCount(typeof result.data?.total === 'number' ? result.data.total : 0);
       }
     } catch (error) {
       console.error('Failed to fetch unread count:', error);
@@ -150,14 +150,14 @@ export function NotificationBell() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        receiverId: user.id.toString(),
+        page: '1',
         pageSize: '20',
       });
       if (activeTab !== 'all') {
         params.set('type', activeTab);
       }
       
-      const response = await fetch(`/api/notifications?${params}`);
+      const response = await fetch(`/api/messages?${params}`);
       const result = await response.json();
       if (result.success) {
         setNotifications(result.data.list);
@@ -187,10 +187,8 @@ export function NotificationBell() {
   // 标记为已读
   const handleMarkAsRead = async (notificationId: number) => {
     try {
-      const response = await fetch(`/api/notifications/${notificationId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isRead: true }),
+      const response = await fetch(`/api/messages/${notificationId}/read`, {
+        method: 'POST',
       });
       if (response.ok) {
         setNotifications(prev =>
@@ -207,10 +205,10 @@ export function NotificationBell() {
   const handleMarkAllAsRead = async () => {
     if (!user?.id) return;
     try {
-      const response = await fetch('/api/notifications/read-all', {
+      const response = await fetch('/api/messages/read-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receiverId: user.id }),
+        body: JSON.stringify({}),
       });
       if (response.ok) {
         setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
@@ -224,7 +222,7 @@ export function NotificationBell() {
   // 删除通知
   const handleDelete = async (notificationId: number) => {
     try {
-      const response = await fetch(`/api/notifications/${notificationId}`, {
+      const response = await fetch(`/api/messages/${notificationId}`, {
         method: 'DELETE',
       });
       if (response.ok) {
@@ -245,9 +243,9 @@ export function NotificationBell() {
     if (!notification.isRead) {
       handleMarkAsRead(notification.id);
     }
-    if (notification.link) {
+    if (notification.actionUrl) {
       setOpen(false);
-      router.push(notification.link);
+      router.push(notification.actionUrl);
     }
   };
 
@@ -332,14 +330,14 @@ export function NotificationBell() {
                       key={notification.id}
                       className={cn(
                         'group relative p-3 cursor-pointer border-l-2 transition-colors hover:bg-muted/50',
-                        getNotificationStyle(notification.level),
+                        getNotificationStyle(notification.priority),
                         !notification.isRead && 'bg-accent/30'
                       )}
                       onClick={() => handleClick(notification)}
                     >
                       <div className="flex gap-3">
                         <div className="mt-0.5 shrink-0">
-                          {getNotificationIcon(notification.type, notification.level)}
+                          {getNotificationIcon(notification.type, notification.priority)}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
@@ -364,7 +362,7 @@ export function NotificationBell() {
                               })}
                             </span>
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {notification.link && (
+                              {notification.actionUrl && (
                                 <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
                               )}
                             </div>

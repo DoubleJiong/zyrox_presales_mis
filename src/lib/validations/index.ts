@@ -381,7 +381,7 @@ export const PROJECT_VALIDATION_RULES = {
   actualAmount: {
     required: false,
     type: 'amount',
-    label: '实际金额',
+    label: '中标金额',
   },
   status: {
     required: false,

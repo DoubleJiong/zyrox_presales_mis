@@ -320,10 +320,10 @@ export const projects = pgTable('bus_project', {
   opportunityId: integer('opportunity_id').references(() => opportunities.id),
   customerId: integer('customer_id').references(() => customers.id),
   customerName: varchar('customer_name', { length: 200 }), // 冗余字段，用于性能优化
-  projectTypeId: integer('project_type_id').references(() => projectTypes.id), // 项目类型ID
-  projectType: varchar('project_type', { length: 50 }), // 项目类型代码（用于快速查询）
+  projectTypeId: integer('project_type_id'), // [deprecated] 旧 FK 已移除，项目类型统一使用字典 project_type varchar
+  projectType: varchar('project_type', { length: 500 }), // 项目类型代码（字典 project_type category，逗号分隔多值；多选时最长可达数百字符）
   // V1.2: 项目阶段（商机→投标→执行→结算→归档）
-  projectStage: varchar('project_stage', { length: 50 }).notNull().default('opportunity'), // opportunity, bidding, execution, settlement, archived
+  projectStage: varchar('project_stage', { length: 50 }).notNull().default('opportunity'), // 受控11阶段: opportunity, bidding_pending, bidding, solution_review, contract_pending, delivery_preparing, delivering, settlement, archived, cancelled, suspended
   industry: varchar('industry', { length: 50 }), // 行业
   region: varchar('region', { length: 50 }), // 区域
   description: text('description'), // 项目描述
@@ -375,7 +375,8 @@ export const projects = pgTable('bus_project', {
   deliveryManagerId: integer('delivery_manager_id').references(() => users.id), // 项目交付负责人
   // V3.0: 项目导入新增字段
   year: integer('year'), // 项目年份
-  fundSource: varchar('fund_source', { length: 50 }), // 资金来源
+  fundSource: varchar('fund_source', { length: 50 }), // 资金来源（字典 fund_source category）
+  contractingCompanyId: integer('contracting_company_id').references(() => subsidiaries.id), // 承接公司（FK → sys_subsidiary）
   deletedAt: timestamp('deleted_at'), // 软删除时间
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -406,6 +407,10 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   customer: one(customers, {
     fields: [projects.customerId],
     references: [customers.id],
+  }),
+  contractingCompany: one(subsidiaries, {
+    fields: [projects.contractingCompanyId],
+    references: [subsidiaries.id],
   }),
   // V1.2: 新增关系
   projectOpportunity: one(projectOpportunities, {
@@ -1021,6 +1026,11 @@ export const performanceRecordsRelations = relations(performanceRecords, ({ one 
 // ============================================
 
 // 通知表
+/**
+ * @deprecated 使用 sys_message（messages 表）替代。
+ * sys_notification 仅保留历史数据兼容，不应写入新通知。
+ * 前端通知铃铛已切换至 /api/messages。
+ */
 export const notifications = pgTable('sys_notification', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 200 }).notNull(),
@@ -1281,6 +1291,10 @@ export const alertRules = pgTable('bus_alert_rule', {
   checkFrequency: varchar('check_frequency', { length: 20 }).notNull().default('daily'), // 检查频率：hourly, daily, weekly, monthly
   notificationChannels: jsonb('notification_channels').$type<string[]>(), // 通知渠道：email, sms, system, webhook
   recipientIds: jsonb('recipient_ids').$type<number[]>(), // 通知接收人ID列表
+  sceneTemplate: varchar('scene_template', { length: 50 }), // 场景模板编码（alert_scene_template 字典值）
+  triggerType: varchar('trigger_type', { length: 20 }).default('threshold'), // 触发类型：signal=事件驱动，threshold=定时扫描
+  cronExpression: varchar('cron_expression', { length: 100 }), // 检查频率对应的 cron 表达式（仅 threshold 型有效）
+  pgBossJobName: varchar('pg_boss_job_name', { length: 200 }), // pg-boss 注册的定时任务唯一名称（格式：alert:rule:{id}）
   description: text('description'), // 规则描述
   createdBy: integer('created_by').references(() => users.id), // 创建人
   deletedAt: timestamp('deleted_at'), // 软删除时间
@@ -1325,6 +1339,11 @@ export const alertHistories = pgTable('bus_alert_history', {
   resolvedAt: timestamp('resolved_at'), // 解决时间
   resolvedBy: integer('resolved_by').references(() => users.id), // 解决人
   resolutionNote: text('resolution_note'), // 解决备注
+  ignoredBy: integer('ignored_by').references(() => users.id), // 忽略操作人
+  ignoredAt: timestamp('ignored_at'), // 忽略时间
+  ignoreReason: text('ignore_reason'), // 忽略原因（用户填写）
+  autoClosedAt: timestamp('auto_closed_at'), // 系统自动关闭时间（条件已自愈，仅 threshold 型）
+  autoClosedReason: text('auto_closed_reason'), // 自动关闭原因描述
   deletedAt: timestamp('deleted_at'), // 软删除时间
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
@@ -1343,10 +1362,17 @@ export const alertHistoriesRelations = relations(alertHistories, ({ one, many })
   acknowledger: one(users, {
     fields: [alertHistories.acknowledgedBy],
     references: [users.id],
+    relationName: 'alert_history_acknowledger',
   }),
   resolver: one(users, {
     fields: [alertHistories.resolvedBy],
     references: [users.id],
+    relationName: 'alert_history_resolver',
+  }),
+  ignorer: one(users, {
+    fields: [alertHistories.ignoredBy],
+    references: [users.id],
+    relationName: 'alert_history_ignorer',
   }),
 }));
 

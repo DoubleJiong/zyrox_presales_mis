@@ -91,7 +91,7 @@ export const GET = withAuth(async (
     }
     
     // BUG-022: 验证客户状态参数是否有效
-    const validStatuses = ['active', 'inactive', 'potential', 'churned'];
+    const validStatuses = ['active', 'inactive', 'potential', 'lost'];
     if (status && !validStatuses.includes(status)) {
       return errorResponse('BAD_REQUEST', `无效的客户状态，有效值为: ${validStatuses.join(', ')}`);
     }
@@ -367,7 +367,7 @@ export const POST = withAuth(async (
       return errorResponse('BAD_REQUEST', '邮箱格式不正确');
     }
     if (contactPhone && !isValidPhone(contactPhone)) {
-      return errorResponse('BAD_REQUEST', '手机号格式不正确（需要11位大陆手机号）');
+      return errorResponse('BAD_REQUEST', '电话号码格式不正确（支持手机号或座机号）');
     }
 
     // BUG-041: 客户行业枚举校验
@@ -377,7 +377,7 @@ export const POST = withAuth(async (
     }
 
     // BUG-039: 客户状态枚举校验
-    const validStatuses = ['potential', 'active', 'inactive', 'churned'];
+    const validStatuses = ['potential', 'active', 'inactive', 'lost'];
     if (status && !validStatuses.includes(status)) {
       return errorResponse('BAD_REQUEST', '无效的客户状态');
     }

@@ -169,6 +169,6 @@ export const CacheKeys = {
   users: () => 'users:all',
   roles: () => 'roles:all',
   customerTypes: () => 'customer-types:all',
-  projectTypes: () => 'project-types:all',
+  projectTypes: () => 'project-types:all', // deprecated: now served by dictionary
   solutionTypes: () => 'solution-types:all',
 };

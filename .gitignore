@@ -10,6 +10,15 @@ artifacts/
 tmp/
 tmp-*
 .tmp-*
+build-*.exit*
+sweep-*.exit
+acceptance-sweep-*.json
+playwright-exit*.txt
+playwright-data-screen-*.json
+playwright-smoke-*.json
+phase*-playwright-report.json
+*-playwright-report.json
+*-report.json
 public/local-uploads/
 *.log
 *.tmp

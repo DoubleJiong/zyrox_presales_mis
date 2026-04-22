@@ -55,7 +55,7 @@ export async function syncSingleCustomerStats(customerId: number) {
       projectStage: projects.projectStage,
       bidResult: projects.bidResult,
       status: projects.status,
-      amount: sql<string>`COALESCE(CAST(COALESCE(${projects.actualAmount}, ${projects.estimatedAmount}, 0) AS DECIMAL), 0)`,
+      amount: sql<string>`COALESCE(CAST(${projects.actualAmount} AS DECIMAL), 0)`,
     })
     .from(projects)
     .where(and(

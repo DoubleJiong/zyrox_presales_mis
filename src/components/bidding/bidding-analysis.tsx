@@ -31,7 +31,7 @@ import {
   Trophy, 
   Target, 
   TrendingUp, 
-  DollarSign,
+  Banknote,
   Calendar,
   Users,
   AlertCircle,
@@ -102,8 +102,15 @@ export function BiddingAnalysis() {
   // 准备图表数据
   const prepareBiddingTypeData = () => {
     if (!statistics?.biddingTypeStats) return [];
+    const labelMap: Record<string, string> = {
+      open: '公开招标', invite: '邀请招标', competitive: '竞争性谈判',
+      consultation: '竞争性磋商', inquiry: '询价', centralized: '集采',
+      single: '单一来源',
+      // legacy values
+      public: '公开招标', private: '邀请招标', negotiation: '竞争性谈判',
+    };
     return Object.entries(statistics.biddingTypeStats).map(([type, stats]) => ({
-      name: type === 'public' ? '公开招标' : type === 'private' ? '邀请招标' : type,
+      name: labelMap[type] ?? type,
       中标: stats.won,
       落标: stats.lost,
       总计: stats.total,
@@ -223,7 +230,7 @@ export function BiddingAnalysis() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">投标总额</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <Banknote className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -258,7 +265,7 @@ export function BiddingAnalysis() {
       <Tabs defaultValue="trend" className="space-y-4">
         <TabsList>
           <TabsTrigger value="trend">投标趋势</TabsTrigger>
-          <TabsTrigger value="type">投标类型</TabsTrigger>
+          <TabsTrigger value="type">招标方式</TabsTrigger>
           <TabsTrigger value="competitor">竞争对手</TabsTrigger>
           <TabsTrigger value="manager">人员统计</TabsTrigger>
           <TabsTrigger value="reason">落标原因</TabsTrigger>
@@ -312,8 +319,8 @@ export function BiddingAnalysis() {
         <TabsContent value="type">
           <Card>
             <CardHeader>
-              <CardTitle>投标类型分布</CardTitle>
-              <CardDescription>按投标类型统计中标率</CardDescription>
+              <CardTitle>招标方式分布</CardTitle>
+              <CardDescription>按招标方式统计中标率</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-80">

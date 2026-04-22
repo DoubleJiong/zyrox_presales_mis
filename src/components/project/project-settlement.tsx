@@ -19,7 +19,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import {
   Calculator,
-  DollarSign,
+  Banknote,
   TrendingUp,
   TrendingDown,
   Calendar,
@@ -186,7 +186,7 @@ export function ProjectSettlement({ projectId, readOnly = false }: ProjectSettle
                 />
               ) : (
                 <p className="mt-1 text-2xl font-bold flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-muted-foreground" />
+                  <Banknote className="h-5 w-5 text-muted-foreground" />
                   {currentData?.settlementAmount ? `¥${Number(currentData.settlementAmount).toLocaleString()}` : '-'}
                 </p>
               )}

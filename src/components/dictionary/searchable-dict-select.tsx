@@ -19,13 +19,11 @@ import {
 } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle } from 'lucide-react';
-
-interface DictOption {
-  value: string;
-  label: string;
-  sort: number;
-  extraData?: Record<string, any>;
-}
+import {
+  type DictOption,
+  getCachedOptions,
+  fetchDictionaryOptions,
+} from './dict-cache';
 
 interface SearchableDictSelectProps {
   /** 字典分类编码 */
@@ -50,10 +48,6 @@ interface SearchableDictSelectProps {
   notFoundText?: string;
 }
 
-// 缓存字典数据
-const dictCache: Record<string, { data: DictOption[]; timestamp: number }> = {};
-const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
-
 export function SearchableDictSelect({
   category,
   value,
@@ -73,10 +67,10 @@ export function SearchableDictSelect({
   const [search, setSearch] = useState('');
 
   const loadOptions = useCallback(async () => {
-    // 检查缓存
-    const cached = dictCache[category];
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      setOptions(cached.data);
+    // 检查共享缓存
+    const cached = getCachedOptions(category);
+    if (cached) {
+      setOptions(cached);
       setLoading(false);
       return;
     }
@@ -85,20 +79,11 @@ export function SearchableDictSelect({
       setLoading(true);
       setError(null);
 
-      const url = `/api/dictionary/options?categories=${category}${includeInactive ? '&includeInactive=true' : ''}`;
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.success && data.data[category]) {
-        const optionsData = data.data[category];
-        // 更新缓存
-        dictCache[category] = {
-          data: optionsData,
-          timestamp: Date.now(),
-        };
-        setOptions(optionsData);
+      const result = await fetchDictionaryOptions([category], includeInactive);
+      if (result[category]) {
+        setOptions(result[category]);
       } else {
-        setError(data.error || '加载失败');
+        setError('加载失败');
         setOptions([]);
       }
     } catch (err) {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, Users, FolderKanban, BarChart3, FileText, Settings, MonitorPlay, Scale, Bell, Calendar, CheckSquare, MessageSquare, FileCheck } from 'lucide-react';
+import { LayoutDashboard, Users, FolderKanban, BarChart3, FileText, Settings, MonitorPlay, Scale, Bell, Calendar, CheckSquare, FileCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { usePermissions } from '@/components/auth/PermissionProvider';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -21,6 +21,7 @@ export const navItemsConfig: Omit<NavItem, 'badge'>[] = [
     title: '工作台',
     href: '/workbench',
     icon: LayoutDashboard,
+    badgeKey: 'messages',
   },
   {
     title: '日程管理',
@@ -83,12 +84,6 @@ export const navItemsConfig: Omit<NavItem, 'badge'>[] = [
     href: '/contracts',
     icon: FileCheck,
     badgeKey: 'contracts',
-  },
-  {
-    title: '消息中心',
-    href: '/messages',
-    icon: MessageSquare,
-    badgeKey: 'messages',
   },
   {
     title: '系统设置',

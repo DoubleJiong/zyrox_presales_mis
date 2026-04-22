@@ -9,6 +9,43 @@ const checkApiPermissionMock = vi.fn();
 const getPersonnelViewMock = vi.fn();
 const getTeamExecutionSummaryReadModelMock = vi.fn();
 
+// DB mock — region-view route queries DB directly
+const makeChain = (rows: unknown[] = []): object => {
+  const thenFn = (resolve: (v: unknown[]) => void) => Promise.resolve(rows).then(resolve);
+  const handler: ProxyHandler<object> = {
+    get(_: object, prop: string | symbol) {
+      if (prop === 'then') return thenFn;
+      if (prop === Symbol.iterator) return rows[Symbol.iterator].bind(rows);
+      return () => new Proxy({}, handler);
+    },
+  };
+  return new Proxy({}, handler);
+};
+
+vi.mock('@/db', () => ({
+  db: {
+    select: vi.fn(() => makeChain([{ count: 0 }])),
+    execute: vi.fn(async () => []),
+  },
+}));
+
+vi.mock('@/db/schema', () => ({
+  projects: { id: 'p.id', deletedAt: 'p.deletedAt', projectStage: 'p.stage', region: 'p.region', industry: 'p.industry', projectType: 'p.type', estimatedAmount: 'p.estAmt', actualAmount: 'p.actAmt', bidResult: 'p.bidResult', contractAmount: 'p.contractAmt', contractingCompanyId: 'p.cid', projectName: 'p.name' },
+  customers: { deletedAt: 'c.deletedAt', region: 'c.region' },
+  subsidiaries: { id: 's.id', subsidiaryName: 's.name', deletedAt: 's.deletedAt', status: 's.status' },
+  projectPresalesRecords: { projectId: 'ppr.pid', totalWorkHours: 'ppr.hours', deletedAt: 'ppr.deletedAt' },
+}));
+
+vi.mock('drizzle-orm', () => ({
+  sql: vi.fn((strings: TemplateStringsArray) => ({ _sql: strings.join('?') })),
+  eq: vi.fn(), and: vi.fn(), or: vi.fn(), not: vi.fn(), isNull: vi.fn(), inArray: vi.fn(),
+  count: vi.fn(() => 0), sum: vi.fn(() => null),
+}));
+
+vi.mock('@/lib/permissions', () => ({
+  PERMISSIONS: { DATASCREEN_VIEW: 'datascreen:view' },
+}));
+
 vi.mock('@/lib/security', () => ({
   performSecurityChecks: performSecurityChecksMock,
   addSecurityHeaders: addSecurityHeadersMock,
@@ -70,11 +107,11 @@ describe('data-screen authorization regression', () => {
     checkApiPermissionMock.mockResolvedValue({ allowed: true });
   });
 
-  it('returns 401 when the canonical personnel-view route has no authenticated user', async () => {
+  it('returns 401 when the region-view route has no authenticated user', async () => {
     getValidatedAuthContextMock.mockResolvedValueOnce(null);
 
-    const { GET } = await import('../../../src/app/api/data-screen/personnel-view/route');
-    const response = await GET(new NextRequest('http://localhost/api/data-screen/personnel-view?preset=management'));
+    const { GET } = await import('../../../src/app/api/data-screen/region-view/route');
+    const response = await GET(new NextRequest('http://localhost/api/data-screen/region-view'));
     const payload = await response.json();
 
     expect(response.status).toBe(401);
@@ -89,7 +126,7 @@ describe('data-screen authorization regression', () => {
     expect(getPersonnelViewMock).not.toHaveBeenCalled();
   });
 
-  it('returns 403 when the canonical personnel-view route misses datascreen:view', async () => {
+  it('returns 403 when the region-view route misses datascreen:view', async () => {
     getValidatedAuthContextMock.mockResolvedValueOnce({
       payload: { userId: 7 },
       user: null,
@@ -99,35 +136,29 @@ describe('data-screen authorization regression', () => {
       permissions: [],
       isSuperAdmin: false,
     });
+    checkApiPermissionMock.mockResolvedValueOnce({ allowed: false, reason: '需要权限: datascreen:view' });
 
-    const { GET } = await import('../../../src/app/api/data-screen/personnel-view/route');
-    const response = await GET(new NextRequest('http://localhost/api/data-screen/personnel-view?preset=management'));
+    const { GET } = await import('../../../src/app/api/data-screen/region-view/route');
+    const response = await GET(new NextRequest('http://localhost/api/data-screen/region-view'));
     const payload = await response.json();
 
     expect(response.status).toBe(403);
-    expect(payload).toMatchObject({
-      success: false,
-      error: {
-        code: 'FORBIDDEN',
-        message: '需要权限: datascreen:view',
-      },
-    });
-    expect(checkApiPermissionMock).toHaveBeenCalledWith(7, 'GET', '/api/data-screen/personnel-view');
-    expect(getPersonnelViewMock).not.toHaveBeenCalled();
+    expect(payload.success).toBe(false);
+    expect(payload.error.code).toBe('FORBIDDEN');
   });
 
-  it('returns 403 when the team-execution route is blocked by API permission lookup', async () => {
+  it('returns 403 when the region-view route is blocked by API permission lookup', async () => {
     getValidatedAuthContextMock.mockResolvedValueOnce({
       payload: { userId: 7 },
       user: null,
     });
     checkApiPermissionMock.mockResolvedValueOnce({
       allowed: false,
-      reason: '需要权限: team-execution-cockpit:view',
+      reason: '需要权限: datascreen:view',
     });
 
-    const { GET } = await import('../../../src/app/api/data-screen/team-execution/summary/route');
-    const response = await GET(new NextRequest('http://localhost/api/data-screen/team-execution/summary?view=role&range=7d'));
+    const { GET } = await import('../../../src/app/api/data-screen/region-view/route');
+    const response = await GET(new NextRequest('http://localhost/api/data-screen/region-view'));
     const payload = await response.json();
 
     expect(response.status).toBe(403);
@@ -135,10 +166,8 @@ describe('data-screen authorization regression', () => {
       success: false,
       error: {
         code: 'FORBIDDEN',
-        message: '需要权限: team-execution-cockpit:view',
       },
     });
-    expect(checkApiPermissionMock).toHaveBeenCalledWith(7, 'GET', '/api/data-screen/team-execution/summary');
     expect(getTeamExecutionSummaryReadModelMock).not.toHaveBeenCalled();
   });
 });

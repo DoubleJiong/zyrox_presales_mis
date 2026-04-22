@@ -160,6 +160,7 @@ function SolutionsPageContent() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(ITEMS_PER_PAGE);
   
   // V3.0: 方案分类筛选
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
@@ -302,16 +303,16 @@ function SolutionsPageContent() {
     return result;
   }, [solutions, search, statusFilter, typeFilter, quickFilter, currentUserId, categoryFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredSolutions.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filteredSolutions.length / itemsPerPage));
 
   const paginatedSolutions = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredSolutions.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [currentPage, filteredSolutions]);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredSolutions.slice(startIndex, startIndex + itemsPerPage);
+  }, [currentPage, filteredSolutions, itemsPerPage]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, statusFilter, typeFilter, quickFilter, categoryFilter]);
+  }, [search, statusFilter, typeFilter, quickFilter, categoryFilter, itemsPerPage]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -550,8 +551,9 @@ function SolutionsPageContent() {
 
   // 渲染表格视图
   const renderTableView = () => (
+    <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] rounded-md border">
     <Table>
-      <TableHeader>
+      <TableHeader className="sticky top-0 z-20 bg-background">
         <TableRow>
           <TableHead>方案名称</TableHead>
           <TableHead>编号</TableHead>
@@ -618,6 +620,7 @@ function SolutionsPageContent() {
         ))}
       </TableBody>
     </Table>
+    </div>
   );
 
   return (
@@ -912,61 +915,78 @@ function SolutionsPageContent() {
                 viewMode === 'card' ? renderCardView() : renderTableView()
               )}
 
-              {totalPages > 1 && (
-                <nav aria-label="pagination" data-testid="solutions-pagination" className="flex items-center justify-between border-t pt-4 mt-4">
-                  <div className="text-sm text-muted-foreground">
-                    显示 {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredSolutions.length)} 条，共 {filteredSolutions.length} 条
+              <nav aria-label="pagination" data-testid="solutions-pagination" className="flex items-center justify-between border-t pt-4 mt-4">
+                <div className="text-sm text-muted-foreground">
+                  显示 {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSolutions.length)} 条，共 {filteredSolutions.length} 条
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    每页
+                    <Select value={String(itemsPerPage)} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
+                      <SelectTrigger className="h-8 w-[70px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    条
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-3"
-                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                      disabled={currentPage === 1}
-                      data-testid="solutions-pagination-prev-button"
-                    >
-                      <ChevronLeft className="h-4 w-4 mr-1" />
-                      上一页
-                    </Button>
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                        if (
-                          page === 1 ||
-                          page === totalPages ||
-                          (page >= currentPage - 1 && page <= currentPage + 1)
-                        ) {
-                          return (
-                            <Button
-                              key={page}
-                              variant={currentPage === page ? 'default' : 'outline'}
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              onClick={() => setCurrentPage(page)}
-                            >
-                              {page}
-                            </Button>
-                          );
-                        } else if (page === currentPage - 2 || page === currentPage + 2) {
-                          return <span key={page} className="text-muted-foreground">...</span>;
-                        }
-                        return null;
-                      })}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-3"
-                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                      disabled={currentPage === totalPages}
-                      data-testid="solutions-pagination-next-button"
-                    >
-                      下一页
-                      <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  </div>
-                </nav>
-              )}
+                  {totalPages > 1 && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-3"
+                        onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                        disabled={currentPage === 1}
+                        data-testid="solutions-pagination-prev-button"
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        上一页
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                          if (
+                            page === 1 ||
+                            page === totalPages ||
+                            (page >= currentPage - 1 && page <= currentPage + 1)
+                          ) {
+                            return (
+                              <Button
+                                key={page}
+                                variant={currentPage === page ? 'default' : 'outline'}
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => setCurrentPage(page)}
+                              >
+                                {page}
+                              </Button>
+                            );
+                          } else if (page === currentPage - 2 || page === currentPage + 2) {
+                            return <span key={page} className="text-muted-foreground">...</span>;
+                          }
+                          return null;
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-3"
+                        onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                        disabled={currentPage === totalPages}
+                        data-testid="solutions-pagination-next-button"
+                      >
+                        下一页
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </nav>
             </CardContent>
           </Card>
         </TabsContent>

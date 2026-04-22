@@ -167,6 +167,9 @@ export default function SubsidiariesSettings() {
           resetForm();
           await fetchSubsidiaries();
           toast({ title: '操作成功', description: '公司信息更新成功' });
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          toast({ variant: 'destructive', title: '更新失败', description: errorData.error?.message || '请稍后重试' });
         }
       } else {
         const response = await fetch('/api/subsidiaries', {
@@ -179,6 +182,9 @@ export default function SubsidiariesSettings() {
           resetForm();
           await fetchSubsidiaries();
           toast({ title: '操作成功', description: '公司创建成功' });
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          toast({ variant: 'destructive', title: '创建失败', description: errorData.error?.message || '请稍后重试' });
         }
       }
     } catch (error) {
@@ -224,6 +230,9 @@ export default function SubsidiariesSettings() {
       if (response.ok) {
         await fetchSubsidiaries();
         toast({ title: '删除成功', description: '公司已被删除' });
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast({ variant: 'destructive', title: '删除失败', description: errorData.error?.message || '请稍后重试' });
       }
     } catch (error) {
       console.error('Failed to delete subsidiary:', error);

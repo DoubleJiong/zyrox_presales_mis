@@ -183,7 +183,26 @@ describe('dictionary governance routes', () => {
     expect(updateMock).toHaveBeenCalledTimes(2);
   });
 
-  it('blocks importing dedicated master data categories through the dictionary import route', async () => {
+  it('allows importing project_type now that it is GUI-managed (no longer dedicated master data)', async () => {
+    // project_type was moved out of DEDICATED_MASTER_DATA into GUI_MANAGED,
+    // so importing it should proceed through the normal category flow.
+    selectMock
+      // Category lookup: project_type does not exist yet → empty result
+      .mockImplementationOnce(() => mockSelectResult([]))
+      // Item lookup after category created
+      .mockImplementationOnce(() => mockSelectResult([]));
+    insertMock
+      // Category insert
+      .mockImplementationOnce(() => ({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn(async () => [{ id: 99, categoryCode: 'project_type' }]),
+        }),
+      }))
+      // Item insert
+      .mockImplementationOnce(() => ({
+        values: vi.fn(async () => [{ id: 100 }]),
+      }));
+
     const { POST } = await import('../../../src/app/api/dictionary/import/route');
     const response = await POST(new NextRequest('http://localhost/api/dictionary/import', {
       method: 'POST',
@@ -204,22 +223,8 @@ describe('dictionary governance routes', () => {
     }));
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      success: true,
-      results: {
-        categories: {
-          skipped: 1,
-        },
-        items: {
-          created: 0,
-          updated: 0,
-        },
-        errors: [
-          expect.stringContaining('project_type'),
-        ],
-      },
-    });
-    expect(selectMock).not.toHaveBeenCalled();
-    expect(insertMock).not.toHaveBeenCalled();
+    const body = await response.json();
+    // Should NOT be skipped — project_type is no longer in DEDICATED set
+    expect(body.results.categories.skipped).toBe(0);
   });
 });

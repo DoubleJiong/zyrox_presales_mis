@@ -26,7 +26,7 @@ export const CUSTOMER_TYPE_DEFINITIONS: CustomerTypeDefinition[] = [
     dictValue: 'government',
     name: '政府',
     description: '政府机关和事业单位客户',
-    sortOrder: 2,
+    sortOrder: 5,
   },
   {
     id: 3,
@@ -34,7 +34,7 @@ export const CUSTOMER_TYPE_DEFINITIONS: CustomerTypeDefinition[] = [
     dictValue: 'enterprise',
     name: '企业',
     description: '企业和商业机构客户',
-    sortOrder: 3,
+    sortOrder: 4,
   },
   {
     id: 4,
@@ -42,7 +42,7 @@ export const CUSTOMER_TYPE_DEFINITIONS: CustomerTypeDefinition[] = [
     dictValue: 'hospital',
     name: '医院',
     description: '医院及医疗卫生机构客户',
-    sortOrder: 4,
+    sortOrder: 8,
   },
   {
     id: 5,
@@ -50,23 +50,23 @@ export const CUSTOMER_TYPE_DEFINITIONS: CustomerTypeDefinition[] = [
     dictValue: 'k12',
     name: 'K12',
     description: '中小学、幼儿园及基础教育客户',
-    sortOrder: 5,
+    sortOrder: 2,
   },
   {
     id: 6,
     dbCode: 'HIGHER_VOCATIONAL',
     dictValue: 'higher_vocational',
-    name: '高职',
-    description: '高职高专、职业学院及职业大学客户',
+    name: '其他事业单位',
+    description: '高职高专、职业学院及其他事业单位客户',
     sortOrder: 6,
   },
   {
     id: 7,
     dbCode: 'SECONDARY_VOCATIONAL',
     dictValue: 'secondary_vocational',
-    name: '中专',
-    description: '中专、中职及中等职业学校客户',
-    sortOrder: 7,
+    name: '中职',
+    description: '中职、中专及中等职业学校客户',
+    sortOrder: 3,
   },
   {
     id: 8,
@@ -74,7 +74,7 @@ export const CUSTOMER_TYPE_DEFINITIONS: CustomerTypeDefinition[] = [
     dictValue: 'military_police',
     name: '军警',
     description: '军队、武警、公安及警务院校客户',
-    sortOrder: 8,
+    sortOrder: 7,
   },
 ];
 
@@ -95,6 +95,7 @@ const CUSTOMER_TYPE_INPUT_ALIASES: Record<string, string> = {
   higher_vocational: 'HIGHER_VOCATIONAL',
   highervocational: 'HIGHER_VOCATIONAL',
   '高职': 'HIGHER_VOCATIONAL',
+  '其他事业单位': 'HIGHER_VOCATIONAL',
   '高专': 'HIGHER_VOCATIONAL',
   '职业学院': 'HIGHER_VOCATIONAL',
   '职业技术学院': 'HIGHER_VOCATIONAL',
@@ -107,6 +108,7 @@ const CUSTOMER_TYPE_INPUT_ALIASES: Record<string, string> = {
   secondaryvocational: 'SECONDARY_VOCATIONAL',
   '中专': 'SECONDARY_VOCATIONAL',
   '中职': 'SECONDARY_VOCATIONAL',
+  '中等职业': 'SECONDARY_VOCATIONAL',
   '中等专业学校': 'SECONDARY_VOCATIONAL',
 
   k12: 'K12',

@@ -165,13 +165,13 @@ export async function POST(request: NextRequest) {
       // 行业类型
       { category: 'industry', items: [
         { code: 'university', name: '高校', value: 'university', order: 1 },
-        { code: 'government', name: '政府', value: 'government', order: 2 },
-        { code: 'enterprise', name: '企业', value: 'enterprise', order: 3 },
-        { code: 'hospital', name: '医院', value: 'hospital', order: 4 },
-        { code: 'k12', name: 'K12', value: 'k12', order: 5 },
-        { code: 'higher_vocational', name: '高职', value: 'higher_vocational', order: 6 },
-        { code: 'secondary_vocational', name: '中专', value: 'secondary_vocational', order: 7 },
-        { code: 'military_police', name: '军警', value: 'military_police', order: 8 },
+        { code: 'k12', name: 'K12', value: 'k12', order: 2 },
+        { code: 'secondary_vocational', name: '中职', value: 'secondary_vocational', order: 3 },
+        { code: 'enterprise', name: '企业', value: 'enterprise', order: 4 },
+        { code: 'government', name: '政府', value: 'government', order: 5 },
+        { code: 'higher_vocational', name: '其他事业单位', value: 'higher_vocational', order: 6 },
+        { code: 'military_police', name: '军警', value: 'military_police', order: 7 },
+        { code: 'hospital', name: '医院', value: 'hospital', order: 8 },
       ]},
       // 区域
       { category: 'region', items: [

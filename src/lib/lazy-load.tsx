@@ -100,43 +100,6 @@ export const LazyProjectRadar = dynamic(
   }
 );
 
-// 数据面板组件
-export const LazyDataPanels = dynamic(
-  () => import('@/components/dashboard/DataPanels').then((mod) => ({
-    default: mod.SalesPanel,
-  })),
-  {
-    loading: () => <CardSkeleton />,
-    ssr: false,
-  }
-);
-
-// 趋势图组件
-export const LazyTrendChart = dynamic(
-  () => import('@/components/dashboard/TrendChart').then((mod) => mod.TrendChart),
-  {
-    loading: () => <ChartSkeleton />,
-    ssr: false,
-  }
-);
-
-// 科技风格统计卡片
-export const LazyTechStatCard = dynamic(
-  () => import('@/components/dashboard/TechStatCard').then((mod) => mod.TechStatCard),
-  {
-    loading: () => <CardSkeleton />,
-  }
-);
-
-// 地图组件
-export const LazyTechMapChart = dynamic(
-  () => import('@/components/dashboard/TechMapChart').then((mod) => mod.TechMapChart),
-  {
-    loading: () => <ChartSkeleton height="h-96" />,
-    ssr: false,
-  }
-);
-
 // 日历组件
 export const LazyCalendar = dynamic(
   () => import('@/components/calendar/calendar-component').then((mod) => mod.CalendarComponent),
@@ -172,9 +135,6 @@ export function preloadComponent(importFn: () => Promise<unknown>) {
 export const lazyComponents = {
   kpiGauge: LazyKpiGauge,
   projectRadar: LazyProjectRadar,
-  trendChart: LazyTrendChart,
-  techStatCard: LazyTechStatCard,
-  techMapChart: LazyTechMapChart,
   calendar: LazyCalendar,
 };
 
@@ -182,9 +142,6 @@ export const lazyComponents = {
 export const preloadMap: Record<string, () => Promise<unknown>> = {
   kpiGauge: () => import('@/components/dashboard/kpi-gauge'),
   projectRadar: () => import('@/components/dashboard/project-radar'),
-  trendChart: () => import('@/components/dashboard/TrendChart'),
-  techStatCard: () => import('@/components/dashboard/TechStatCard'),
-  techMapChart: () => import('@/components/dashboard/TechMapChart'),
 };
 
 // ============ 懒加载面板包装器 ============

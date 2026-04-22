@@ -18,9 +18,9 @@ import {
 } from '@/components/ui/popover';
 import {
   getProjectTypeDisplayLabel,
-  getProjectTypeOaCategory,
+  getProjectTypeCategory,
   normalizeProjectTypeCodes,
-  OA_PROJECT_TYPE_CATEGORY_LABELS,
+  PROJECT_TYPE_CATEGORY_LABELS,
 } from '@/lib/project-type-codec';
 
 export interface ProjectTypeOption {
@@ -94,7 +94,7 @@ export function ProjectTypeSelect({
   });
 
   const groupedOptions = filteredOptions.reduce<Record<string, ProjectTypeOption[]>>((groups, option) => {
-    const groupKey = getProjectTypeOaCategory(option.value);
+    const groupKey = getProjectTypeCategory(option.value);
     if (!groups[groupKey]) {
       groups[groupKey] = [];
     }
@@ -149,7 +149,7 @@ export function ProjectTypeSelect({
           <CommandList>
             <CommandEmpty>未找到项目类型</CommandEmpty>
             {Object.entries(groupedOptions).map(([groupKey, groupOptions]) => (
-              <CommandGroup key={groupKey} heading={OA_PROJECT_TYPE_CATEGORY_LABELS[groupKey] || OA_PROJECT_TYPE_CATEGORY_LABELS.other} className="max-h-60 overflow-auto">
+              <CommandGroup key={groupKey} heading={PROJECT_TYPE_CATEGORY_LABELS[groupKey] || PROJECT_TYPE_CATEGORY_LABELS.other} className="max-h-60 overflow-auto">
                 {groupOptions.map((opt) => (
                   <CommandItem
                     key={opt.value}
@@ -163,10 +163,7 @@ export function ProjectTypeSelect({
                         selectedValues.includes(opt.value) ? 'opacity-100' : 'opacity-0'
                       )}
                     />
-                    <div className="flex flex-col">
-                      <span>{getProjectTypeDisplayLabel(opt.value)}</span>
-                      <span className="text-xs text-muted-foreground">{opt.value}</span>
-                    </div>
+                    <span>{getProjectTypeDisplayLabel(opt.value)}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>

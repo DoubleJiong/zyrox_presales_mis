@@ -16,9 +16,10 @@ test.describe('data-screen phase2 validation', () => {
     await mockAuthApis(page, authTokens);
     await mockPhase2DataScreenApis(page);
 
-    await page.goto('/data-screen?view=personnel&preset=management&panel=projects&map=province-outside&heatmap=customer&startDate=2026-04-01&endDate=2026-04-08&autoRefresh=0');
+    await page.goto('/data-screen?view=team&preset=management&panel=projects&map=province-outside&heatmap=customer&startDate=2026-04-01&endDate=2026-04-08&autoRefresh=0');
 
     await expect(page.getByTestId('data-screen-page')).toBeVisible();
+    await expect(page.getByTestId('data-screen-team-layout')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('data-screen-personnel-layout')).toBeVisible({ timeout: 20_000 });
 
     await page.getByTestId('data-screen-personnel-item-task-101').click();
@@ -27,9 +28,10 @@ test.describe('data-screen phase2 validation', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('data-screen-personnel-item-detail-drawer')).toBeHidden({ timeout: 20_000 });
 
-    await page.getByTestId('data-screen-primary-view-topic').evaluate((element) => {
+    await page.getByTestId('data-screen-primary-view-project').evaluate((element) => {
       element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
+    await expect(page.getByTestId('data-screen-project-layout')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('data-screen-topic-layout')).toBeVisible({ timeout: 20_000 });
     await page.getByTestId('data-screen-topic-risk-project-3001').click();
     await expect(page.getByTestId('data-screen-topic-project-risk-drawer')).toBeVisible({ timeout: 20_000 });
@@ -52,6 +54,68 @@ test.describe('data-screen phase2 validation', () => {
 async function mockPhase2DataScreenApis(page: Page) {
   await page.route('**/api/navigation/badges**', async (route) => {
     await fulfillJson(route, { success: true, data: {}, error: null });
+  });
+
+  await page.route('**/api/data-screen/team-execution/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.includes('/summary')) {
+      await fulfillJson(route, {
+        success: true,
+        data: {
+          filtersEcho: { view: 'role', range: '7d', focus: 'all', q: '' },
+          window: { range: '7d', startDate: '2026-04-01', endDate: '2026-04-08', label: '近 7 天', activityThresholdDays: 7 },
+          summary: { pendingTotal: 12, dueTodayTasks: 2, overdueTasks: 1, highPriorityTasks: 3, activeProjects: 5, keyProjectPeople: 4, overloadedPeople: 1, lowActivityPeople: 2 },
+        },
+        error: null,
+      });
+    } else if (url.pathname.includes('/risk')) {
+      await fulfillJson(route, {
+        success: true,
+        data: {
+          filtersEcho: { view: 'role', range: '7d', focus: 'all', q: '' },
+          window: { range: '7d', startDate: '2026-04-01', endDate: '2026-04-08', label: '近 7 天', activityThresholdDays: 7 },
+          overview: { highRiskPeople: 1, highRiskProjects: 2, overdueItems: 1, blockedItems: 0 },
+          people: [],
+          projects: [],
+          blockedList: [],
+        },
+        error: null,
+      });
+    } else if (url.pathname.includes('/project')) {
+      await fulfillJson(route, {
+        success: true,
+        data: {
+          filtersEcho: { view: 'project', range: '7d', focus: 'all', q: '' },
+          window: { range: '7d', startDate: '2026-04-01', endDate: '2026-04-08', label: '近 7 天', activityThresholdDays: 7 },
+          overview: { totalProjects: 8, highRiskProjects: 2, stalledProjects: 1, staffingTightProjects: 1 },
+          stageDistribution: [{ stage: '投标', label: '投标', count: 3, highRiskCount: 1, overdueTaskTotal: 2 }],
+          staffingOverview: [],
+          riskHeat: [{ projectId: 3001, projectName: '宁波云医院平台', customerName: '宁波市一院', stage: '投标', status: '推进中', priority: '高', openTaskCount: 5, overdueTaskCount: 2, blockedTodoCount: 1, highPriorityTaskCount: 3, activePeopleCount: 2, overloadedPeopleCount: 1, staleDays: 0, riskScore: 78, lastProgressAt: null, reasons: ['逾期任务'] }],
+          details: [],
+        },
+        error: null,
+      });
+    } else if (url.pathname.includes('/customer')) {
+      await fulfillJson(route, {
+        success: true,
+        data: {
+          filtersEcho: { view: 'customer', range: '7d', focus: 'all', q: '' },
+          window: { range: '7d', startDate: '2026-04-01', endDate: '2026-04-08', label: '近 7 天', activityThresholdDays: 7 },
+          overview: { totalCustomers: 45, lowInteractionCustomers: 8, highBacklogCustomers: 3, highRiskCustomers: 2 },
+          activityDistribution: [
+            { bucket: 'active', label: '活跃', count: 20, description: '近期有互动' },
+            { bucket: 'watch', label: '关注', count: 15, description: '需跟进' },
+            { bucket: 'cooling', label: '降温', count: 7, description: '互动减少' },
+            { bucket: 'silent', label: '沉默', count: 3, description: '无互动' },
+          ],
+          scaleRanking: [{ customerId: 1, customerName: '宁波市一院', region: '浙江', currentProjectCount: 3, riskScore: 45 }],
+          details: [],
+        },
+        error: null,
+      });
+    } else {
+      await fulfillJson(route, { success: true, data: null, error: null });
+    }
   });
 
   await page.route('**/api/data-screen/panels**', async (route) => {

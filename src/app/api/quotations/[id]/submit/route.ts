@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { quotations, quotationApprovals } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { sendMessage } from '@/lib/messages/send';
 
 // POST - 提交审批
 export async function POST(
@@ -29,6 +30,19 @@ export async function POST(
         approverId: approvals[i].userId,
         approvalLevel: i + 1,
         approvalStatus: 'pending',
+      });
+
+      // 通知每位审批人
+      await sendMessage({
+        receiverId: approvals[i].userId,
+        title: '有报价待您审批',
+        content: `报价单已提交，请您审批（审批层级：${i + 1}）。`,
+        type: 'approval',
+        priority: 'normal',
+        relatedType: 'quotation',
+        relatedId: parseInt(id),
+        actionUrl: `/quotations/${id}`,
+        actionText: '查看报价',
       });
     }
 

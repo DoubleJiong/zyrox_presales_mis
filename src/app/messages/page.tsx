@@ -17,9 +17,12 @@ import {
   User,
   Briefcase,
   FileText,
-  Settings
+  Settings,
+  CheckSquare,
+  AtSign
 } from 'lucide-react';
 import Link from 'next/link';
+import { ChevronRight as BreadcrumbChevron } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { useAuth } from '@/contexts/auth-context';
@@ -54,6 +57,9 @@ const getMessageIcon = (type: string) => {
     alert: <AlertCircle className="h-5 w-5" />,
     reminder: <Clock className="h-5 w-5" />,
     message: <MessageSquare className="h-5 w-5" />,
+    task: <CheckSquare className="h-5 w-5" />,
+    approval: <CheckCircle className="h-5 w-5" />,
+    mention: <AtSign className="h-5 w-5" />,
   };
   return icons[type] || icons.notification;
 };
@@ -66,6 +72,9 @@ const getMessageStyle = (type: string) => {
     alert: 'bg-orange-500/10 text-orange-600',
     reminder: 'bg-cyan-500/10 text-cyan-600',
     message: 'bg-green-500/10 text-green-600',
+    task: 'bg-cyan-500/10 text-cyan-600',
+    approval: 'bg-emerald-500/10 text-emerald-600',
+    mention: 'bg-violet-500/10 text-violet-600',
   };
   return styles[type] || styles.notification;
 };
@@ -194,12 +203,19 @@ export default function MessagesPage() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
+      {/* 面包屑 */}
+      <nav className="flex items-center gap-1 text-sm text-muted-foreground">
+        <Link href="/workbench" className="hover:text-foreground transition-colors">工作台</Link>
+        <BreadcrumbChevron className="h-4 w-4" />
+        <span className="text-foreground">收件箱</span>
+      </nav>
+
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">消息中心</h1>
           <p className="text-muted-foreground">
-            管理您的系统通知、提醒消息和工作消息
+            个人事件收件箱 · 可从工作台快速进入
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -231,11 +247,11 @@ export default function MessagesPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">系统通知</p>
-                <p className="text-2xl font-bold">{messages.filter(m => m.type === 'system').length}</p>
+                <p className="text-sm font-medium text-muted-foreground">审批通知</p>
+                <p className="text-2xl font-bold">{messages.filter(m => m.type === 'approval').length}</p>
               </div>
-              <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center">
-                <Settings className="h-5 w-5 text-purple-500" />
+              <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                <CheckCircle className="h-5 w-5 text-emerald-500" />
               </div>
             </div>
           </CardContent>
@@ -244,11 +260,11 @@ export default function MessagesPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">工作提醒</p>
-                <p className="text-2xl font-bold">{messages.filter(m => m.type === 'reminder').length}</p>
+                <p className="text-sm font-medium text-muted-foreground">任务消息</p>
+                <p className="text-2xl font-bold">{messages.filter(m => m.type === 'task').length}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-cyan-500/10 flex items-center justify-center">
-                <Clock className="h-5 w-5 text-cyan-500" />
+                <CheckSquare className="h-5 w-5 text-cyan-500" />
               </div>
             </div>
           </CardContent>
@@ -257,11 +273,11 @@ export default function MessagesPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">工作消息</p>
-                <p className="text-2xl font-bold">{messages.filter(m => m.type === 'message').length}</p>
+                <p className="text-sm font-medium text-muted-foreground">提及(@)</p>
+                <p className="text-2xl font-bold">{messages.filter(m => m.type === 'mention').length}</p>
               </div>
-              <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                <MessageSquare className="h-5 w-5 text-green-500" />
+              <div className="h-10 w-10 rounded-full bg-violet-500/10 flex items-center justify-center">
+                <AtSign className="h-5 w-5 text-violet-500" />
               </div>
             </div>
           </CardContent>
@@ -279,10 +295,12 @@ export default function MessagesPage() {
                   <Badge variant="destructive" className="ml-2">{unreadCount}</Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="system">系统通知</TabsTrigger>
-              <TabsTrigger value="notification">业务通知</TabsTrigger>
+              <TabsTrigger value="task">任务</TabsTrigger>
+              <TabsTrigger value="approval">审批</TabsTrigger>
               <TabsTrigger value="reminder">提醒</TabsTrigger>
-              <TabsTrigger value="message">消息</TabsTrigger>
+              <TabsTrigger value="mention">提及</TabsTrigger>
+              <TabsTrigger value="alert">预警</TabsTrigger>
+              <TabsTrigger value="system">系统</TabsTrigger>
             </TabsList>
           </Tabs>
         </CardHeader>

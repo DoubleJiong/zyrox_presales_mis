@@ -123,7 +123,7 @@ export function SectionMembersManager({ plateId, plateName }: SectionMembersMana
 
     try {
       setSearching(true);
-      const response = await fetch(`/api/users?keyword=${encodeURIComponent(keyword)}&pageSize=10`);
+      const response = await fetch(`/api/users?keyword=${encodeURIComponent(keyword)}&pageSize=10&purpose=member_search`);
       
       if (response.ok) {
         const data = await response.json();

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { tasks, users, taskDeliverables, projects, projectMembers } from '@/db/schema';
-import { eq, and, isNull } from 'drizzle-orm';
+import { tasks, users, taskDeliverables, projects, projectMembers, messages, schedules } from '@/db/schema';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { withAuth } from '@/lib/auth-middleware';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { getPermissionContext } from '@/lib/permissions/data-scope';
 import { hasFullAccess } from '@/lib/permissions/middleware';
 import { DataScope } from '@/lib/permissions/types';
 import type { ResourceType } from '@/lib/permissions/types';
+import { OperationLogService } from '@/lib/operation-log-service';
 
 function toDateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
@@ -131,7 +132,7 @@ export const PUT = withAuth(async (
     const isAssignee = task.assigneeId === userId;
     const [taskProject] = task.projectId
       ? await db
-          .select({ managerId: projects.managerId, deliveryManagerId: projects.deliveryManagerId })
+          .select({ managerId: projects.managerId, deliveryManagerId: projects.deliveryManagerId, projectName: projects.projectName })
           .from(projects)
           .where(eq(projects.id, task.projectId))
           .limit(1)
@@ -205,6 +206,115 @@ export const PUT = withAuth(async (
       .set(updateData)
       .where(eq(tasks.id, taskId))
       .returning();
+
+    // 任务重分配通知
+    if (
+      body.assigneeId !== undefined &&
+      body.assigneeId !== null &&
+      body.assigneeId !== task.assigneeId
+    ) {
+      try {
+        const newAssignee = parseInt(body.assigneeId);
+        if (!isNaN(newAssignee)) {
+          await db.insert(messages).values({
+            title: '任务重新指派',
+            content: `您被指派了任务「${updatedTask.taskName}」${taskProject?.projectName ? `（项目：${taskProject.projectName}）` : ''}，请及时处理。`,
+            type: 'task',
+            category: 'task',
+            priority: updatedTask.priority === 'urgent' ? 'urgent' : updatedTask.priority === 'high' ? 'high' : 'normal',
+            receiverId: newAssignee,
+            senderId: userId,
+            relatedType: 'task',
+            relatedId: taskId,
+            relatedName: updatedTask.taskName,
+            actionUrl: `/tasks/${taskId}`,
+            actionText: '查看任务',
+            isRead: false,
+            isDeleted: false,
+            updatedAt: new Date(),
+          });
+        }
+      } catch (msgErr) {
+        console.error('[Tasks] Failed to write task reassignment message:', msgErr);
+      }
+    }
+
+    // 任务完成通知（通知项目负责人）
+    if (
+      body.status === 'completed' &&
+      task.status !== 'completed' &&
+      taskProject?.managerId &&
+      taskProject.managerId !== userId
+    ) {
+      try {
+        await db.insert(messages).values({
+          title: '任务已完成',
+          content: `任务「${updatedTask.taskName}」已完成${taskProject?.projectName ? `（项目：${taskProject.projectName}）` : ''}。`,
+          type: 'task',
+          category: 'task',
+          priority: 'normal',
+          receiverId: taskProject.managerId,
+          senderId: userId,
+          relatedType: 'task',
+          relatedId: taskId,
+          relatedName: updatedTask.taskName,
+          actionUrl: `/tasks/${taskId}`,
+          actionText: '查看任务',
+          isRead: false,
+          isDeleted: false,
+          updatedAt: new Date(),
+        });
+      } catch (msgErr) {
+        console.error('[Tasks] Failed to write task completion message:', msgErr);
+      }
+    }
+
+    // 同步关联日程状态（D1/D2/D3）
+    const statusChanged = body.status !== undefined && body.status !== task.status;
+    const dueDateChanged = body.dueDate !== undefined && body.dueDate !== task.dueDate;
+
+    if (statusChanged && (body.status === 'completed' || body.status === 'cancelled')) {
+      // D1/D2: 任务完成或取消时，同步关联日程状态
+      try {
+        await db
+          .update(schedules)
+          .set({ scheduleStatus: body.status, updatedAt: new Date() })
+          .where(and(
+            eq(schedules.relatedType, 'task'),
+            eq(schedules.relatedId, taskId),
+            inArray(schedules.scheduleStatus, ['scheduled'])
+          ));
+      } catch (syncErr) {
+        console.error('[Tasks] Failed to sync schedule status:', syncErr);
+      }
+    }
+
+    if (dueDateChanged && body.dueDate) {
+      // D3: 任务截止日期变更时，同步关联日程的 endDate
+      try {
+        await db
+          .update(schedules)
+          .set({ endDate: body.dueDate, updatedAt: new Date() })
+          .where(and(
+            eq(schedules.relatedType, 'task'),
+            eq(schedules.relatedId, taskId)
+          ));
+      } catch (syncErr) {
+        console.error('[Tasks] Failed to sync schedule end date:', syncErr);
+      }
+    }
+
+    // 操作日志
+    if (statusChanged && body.status === 'completed') {
+      OperationLogService.log({
+        userId,
+        module: 'task',
+        action: 'update',
+        resource: 'task',
+        resourceId: taskId,
+        status: 'success',
+      }).catch(() => {});
+    }
 
     return successResponse({
       ...updatedTask,

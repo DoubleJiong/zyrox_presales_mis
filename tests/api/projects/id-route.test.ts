@@ -142,6 +142,10 @@ vi.mock('@/lib/idempotency', () => ({
   },
 }));
 
+vi.mock('@/lib/alert-scheduler', () => ({
+  alertBoss: { publish: vi.fn(async () => undefined) },
+}));
+
 describe('project detail route', () => {
   beforeEach(() => {
     projectRows = [
@@ -195,7 +199,6 @@ describe('project detail route', () => {
     expect(response.status).toBe(200);
     expect(projectUpdatePayloads).toHaveLength(1);
     expect(projectUpdatePayloads[0]).toMatchObject({
-      projectTypeId: 2,
       projectType: 'software',
     });
   });
@@ -216,7 +219,6 @@ describe('project detail route', () => {
     expect(response.status).toBe(200);
     expect(projectUpdatePayloads).toHaveLength(1);
     expect(projectUpdatePayloads[0]).toMatchObject({
-      projectTypeId: 2,
       projectType: 'software,integration',
     });
   });

@@ -35,6 +35,12 @@ vi.mock('drizzle-orm', () => ({
   },
 }));
 
+vi.mock('@/lib/alert-scheduler', () => ({
+  alertScheduler: {
+    scheduleRule: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 vi.mock('@/lib/api-response', () => ({
   successResponse: (data: unknown) => NextResponse.json({ success: true, data }),
   errorResponse: (code: string, message: string, options?: { status?: number }) =>
@@ -112,6 +118,51 @@ describe('alerts rules api', () => {
       data: expect.objectContaining({
         id: 10,
         message: '预警规则创建成功',
+      }),
+    });
+  });
+
+  it('persists sceneTemplate triggerType and cronExpression on rule creation', async () => {
+    returning.mockResolvedValue([{
+      id: 11,
+      ruleName: '项目长期未更新',
+      status: 'active',
+      thresholdValue: 30,
+      sceneTemplate: 'project_not_updated',
+      triggerType: 'threshold',
+      cronExpression: '0 8 * * *',
+    }]);
+
+    const { POST } = await import('../../../src/app/api/alerts/rules/route');
+    const response = await POST(new NextRequest('http://localhost/api/alerts/rules', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ruleName: '项目长期未更新',
+        ruleType: 'project',
+        ruleCategory: 'not_updated',
+        conditionField: 'updatedAt',
+        thresholdValue: 30,
+        thresholdUnit: 'day',
+        sceneTemplate: 'project_not_updated',
+        triggerType: 'threshold',
+        cronExpression: '0 8 * * *',
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({
+      sceneTemplate: 'project_not_updated',
+      triggerType: 'threshold',
+      cronExpression: '0 8 * * *',
+    }));
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: expect.objectContaining({
+        id: 11,
+        sceneTemplate: 'project_not_updated',
+        triggerType: 'threshold',
+        cronExpression: '0 8 * * *',
       }),
     });
   });
