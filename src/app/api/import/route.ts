@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { projects, customers, opportunities } from '@/db/schema';
 import { successResponse, errorResponse } from '@/lib/api-response';
 import { authenticate } from '@/lib/auth';
+import { normalizeRegionToChinese } from '@/lib/utils/region-normalize';
 
 /**
  * Excel 导入 API
@@ -100,7 +101,7 @@ async function importCustomers(data: Record<string, any>[]) {
         customerId,
         customerName: item.customerName || '未命名客户',
         status: item.status || 'potential',
-        region: item.region || null,
+        region: normalizeRegionToChinese(item.region),
         address: item.address || null,
         contactName: item.contact || null,
         contactPhone: item.phone || null,
