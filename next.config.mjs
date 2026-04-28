@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const buildWorkerCount = 1;
+const buildWorkerCount = 4;
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

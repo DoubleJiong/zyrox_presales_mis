@@ -147,7 +147,6 @@ const REGION_ALIAS_MAP: Record<string, string> = {
   南宁: '广西壮族自治区',
   拉萨: '西藏自治区',
   海口: '海南省',
-  南宁: '广西壮族自治区',
 };
 
 /**
